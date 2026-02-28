@@ -1,64 +1,394 @@
-import Image from "next/image";
+import Header from "@/components/Header";
+import { PedidoSuccessBanner } from "@/components/PedidoSuccessBanner";
+import { RastrearPedido } from "@/components/RastrearPedido";
+import { createClient } from "@/lib/supabase/server";
+import { Suspense } from "react";
+import Link from "next/link";
+import {
+  Facebook,
+  Instagram,
+  Mail,
+  MapPin,
+  MessageCircle,
+  PackageCheck,
+  PawPrint,
+  Phone,
+  ShieldCheck,
+  ShoppingCart,
+  Truck,
+} from "lucide-react";
 
-export default function Home() {
+// Imágenes placeholder por ciclo (cuando no hay imagen en BD)
+const IMAGENES_PLACEHOLDER = [
+  "https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=400&h=280&fit=crop",
+  "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?w=400&h=280&fit=crop",
+  "https://images.unsplash.com/photo-1444464666168-49d633b63c69?w=400&h=280&fit=crop",
+  "https://images.unsplash.com/photo-1553284965-83fd3e82fa5a?w=400&h=280&fit=crop",
+];
+
+export default async function Home() {
+  const supabase = await createClient();
+
+  let categoriasDb: { id: string; nombre: string; imagen: string | null }[] | null = null;
+  let productosDestacados: {
+    id: string;
+    nombre: string;
+    precio: number | string;
+    imagen: string | null;
+    mas_vendido: boolean;
+    nuevo: boolean;
+    subcategorias?: { nombre: string; categorias?: { nombre: string } } | { nombre: string; categorias?: { nombre: string } }[];
+  }[] = [];
+
+  let productosEnOferta: typeof productosDestacados = [];
+  try {
+    const [catRes, prodRes, ofertaRes] = await Promise.all([
+      supabase
+        .from("categorias")
+        .select("id, nombre, imagen")
+        .order("nombre"),
+      supabase
+        .from("productos")
+        .select("id, nombre, precio, aplica_iva, imagen, mas_vendido, nuevo, porcentaje_oferta, producto_presentaciones (precio, porcentaje_oferta, orden, aplica_iva), subcategorias (nombre, categorias (nombre))")
+        .eq("destacado", true)
+        .order("nombre")
+        .limit(12),
+      supabase
+        .from("productos")
+        .select("id, nombre, precio, aplica_iva, imagen, porcentaje_oferta, producto_presentaciones (precio, porcentaje_oferta, orden, aplica_iva), subcategorias (nombre, categorias (nombre))")
+        .order("nombre"),
+    ]);
+    categoriasDb = catRes.data;
+    productosDestacados = (prodRes.data ?? []) as unknown as typeof productosDestacados;
+    const todosProductos = (ofertaRes.data ?? []) as unknown as typeof productosDestacados;
+    productosEnOferta = todosProductos.filter((p) => {
+      const ofertaProd = p.porcentaje_oferta != null && p.porcentaje_oferta > 0;
+      const pps = Array.isArray(p.producto_presentaciones) ? p.producto_presentaciones : p.producto_presentaciones ? [p.producto_presentaciones] : [];
+      const ofertaPres = pps.some((pp: { porcentaje_oferta?: number | null }) => pp.porcentaje_oferta != null && pp.porcentaje_oferta > 0);
+      return ofertaProd || ofertaPres;
+    });
+  } catch {
+    categoriasDb = [];
+    productosDestacados = [];
+    productosEnOferta = [];
+  }
+
+  const categorias = (categoriasDb ?? []).map((cat, i) => ({
+    id: cat.id,
+    nombre: cat.nombre,
+    slug: cat.nombre.toLowerCase().replace(/\s+/g, "-").normalize("NFD").replace(/[\u0300-\u036f]/g, ""),
+    imagen: cat.imagen ?? IMAGENES_PLACEHOLDER[i % IMAGENES_PLACEHOLDER.length],
+  }));
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#ffeef7,transparent_42%),#fff7ef] text-slate-800">
+      <main className="mx-auto w-full max-w-[1260px] px-3 pb-6 pt-3 sm:px-6">
+        <div className="rounded-xl bg-[var(--ca-purple)] px-4 py-2.5 text-white shadow-md">
+          <div className="flex flex-col items-center justify-between gap-1 text-sm font-medium sm:flex-row sm:text-base">
+            <div className="flex items-center gap-2">
+              <Truck size={14} />
+              <span>Envío rápido y seguro</span>
+              <span className="hidden sm:inline">|</span>
+              <span>Soporte 24/7</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Phone size={14} />
+              <span>311 234 5678</span>
+            </div>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+
+        <Header />
+
+        <Suspense fallback={null}>
+          <PedidoSuccessBanner />
+        </Suspense>
+
+        <div className="mt-4">
+          <RastrearPedido />
         </div>
+
+        <section className="mt-8 rounded-[24px] border border-[#f3dcff] bg-white p-8 shadow-[0_12px_28px_rgba(123,31,162,0.08)] sm:p-10">
+          <h2 className="text-center text-2xl font-black text-[var(--ca-purple)] sm:text-3xl">
+            Encuentra lo mejor para tu mascota.
+            <br />
+            ¿Para quién estás comprando hoy?
+          </h2>
+          <div className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            {categorias.length === 0 ? (
+              <p className="col-span-full py-6 text-center text-slate-500">
+                Agrega categorías desde el dashboard para verlas aquí.
+              </p>
+            ) : (
+              categorias.map((cat) => (
+                <Link
+                  key={cat.id}
+                  href={`/tienda/${cat.slug}`}
+                  className="group flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white transition-all hover:border-[var(--ca-orange)]/50 hover:shadow-lg"
+                >
+                  <div className="relative aspect-square overflow-hidden">
+                    <img
+                      src={cat.imagen}
+                      alt={cat.nombre}
+                      className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                    />
+                  </div>
+                  <span className="mx-2 mb-2 mt-1.5 rounded-full bg-[var(--ca-orange)]/15 py-1.5 text-center text-xs font-bold text-[var(--ca-orange)] transition group-hover:bg-[var(--ca-orange)] group-hover:text-white sm:text-sm">
+                    {cat.nombre}
+                  </span>
+                </Link>
+              ))
+            )}
+          </div>
+        </section>
+
+        <section className="mt-5 rounded-full bg-gradient-to-r from-[#fff4d8] via-[#ffe9bf] to-[#ffc874] px-5 py-3 shadow-[0_10px_26px_rgba(255,122,0,0.24)]">
+          <div className="flex flex-col items-center justify-between gap-2 sm:flex-row">
+            <p className="text-center text-lg font-black text-[var(--ca-blue)] sm:text-left">
+              Envíos GRATIS en Barrancabermeja
+            </p>
+            <Link href="/tienda" className="rounded-full bg-[var(--ca-purple)] px-6 py-2 text-sm font-bold text-white transition hover:brightness-110">
+              Comprar ahora
+            </Link>
+          </div>
+        </section>
+
+        {productosEnOferta.length > 0 && (
+          <section className="mt-8">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+              <h2 className="text-xl font-black text-[var(--ca-purple)] sm:text-2xl">
+                Productos en oferta
+              </h2>
+              <Link
+                href="/ofertas"
+                className="rounded-full bg-gradient-to-r from-[#ff6b35] to-[#ff9b23] px-6 py-2 text-sm font-bold text-white shadow-lg transition hover:brightness-105"
+              >
+                Ver todas las ofertas
+              </Link>
+            </div>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {productosEnOferta.slice(0, 8).map((producto) => {
+                const precioBase = typeof producto.precio === "string" ? parseFloat(producto.precio) : Number(producto.precio);
+                const pps = Array.isArray(producto.producto_presentaciones) ? producto.producto_presentaciones : producto.producto_presentaciones ? [producto.producto_presentaciones] : [];
+                const primeraConOferta = [...pps].sort((a: { orden?: number }, b: { orden?: number }) => (a.orden ?? 0) - (b.orden ?? 0)).find((pp: { porcentaje_oferta?: number | null }) => pp.porcentaje_oferta != null && pp.porcentaje_oferta > 0);
+                const ofertaProd = producto.porcentaje_oferta != null && producto.porcentaje_oferta > 0;
+                const ofertaPorc = Number(primeraConOferta?.porcentaje_oferta ?? (ofertaProd ? producto.porcentaje_oferta : 0) ?? 0);
+                const precioRef = primeraConOferta?.precio != null ? Number(primeraConOferta.precio) : precioBase;
+                const aplicaIva = (primeraConOferta as { aplica_iva?: boolean })?.aplica_iva ?? (producto as { aplica_iva?: boolean }).aplica_iva !== false;
+                const precioSinIva = ofertaPorc > 0 ? precioRef * (1 - ofertaPorc / 100) : precioRef;
+                const precioNum = aplicaIva ? precioSinIva * 1.19 : precioSinIva;
+                const precioOriginal = aplicaIva ? precioRef * 1.19 : precioRef;
+                const imagen = producto.imagen ?? IMAGENES_PLACEHOLDER[productosEnOferta.indexOf(producto) % IMAGENES_PLACEHOLDER.length];
+                return (
+                  <Link key={producto.id} href={`/producto/${producto.id}`}>
+                    <article className="card-lift overflow-hidden rounded-3xl border border-[#ece2ff] bg-white p-3 shadow-[0_10px_26px_rgba(123,31,162,0.12)]">
+                      <div className="relative aspect-square overflow-hidden rounded-2xl bg-slate-100">
+                        <span className="absolute left-3 top-3 z-10 rounded-full bg-[#ff6b35] px-3 py-1 text-[10px] font-black text-white">
+                          {ofertaPorc}% OFF
+                        </span>
+                        <img src={imagen} alt={producto.nombre} className="h-full w-full object-cover" />
+                      </div>
+                      <h3 className="mt-3 line-clamp-2 text-base font-bold text-slate-800">{producto.nombre}</h3>
+                      <div className="mt-1 flex items-center gap-2">
+                        <span className="text-sm text-slate-500 line-through">
+                          ${precioOriginal.toLocaleString("es-CO")}
+                        </span>
+                        <p className="text-2xl font-black text-[var(--ca-orange)]">
+                          ${precioNum.toLocaleString("es-CO")}
+                        </p>
+                      </div>
+                      <div className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[var(--ca-orange)] to-[#ff9b23] px-4 py-2 text-sm font-bold text-white transition hover:brightness-105">
+                        <ShoppingCart size={15} />
+                        Ver producto
+                      </div>
+                    </article>
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        <section className="mt-8">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+            <h2 className="text-xl font-black text-[var(--ca-purple)] sm:text-2xl">
+              Productos Destacados
+            </h2>
+            <Link
+              href="/tienda"
+              className="rounded-full bg-[var(--ca-purple)] px-6 py-2 text-sm font-bold text-white shadow-lg transition hover:brightness-105"
+            >
+              Ver todos los destacados
+            </Link>
+          </div>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {productosDestacados.length === 0 ? (
+              <p className="col-span-full py-12 text-center text-slate-500">
+                No hay productos destacados. Marca productos como &quot;Producto destacado&quot; en el dashboard para verlos aquí.
+              </p>
+            ) : (
+              productosDestacados.map((producto) => {
+                const precioBase = typeof producto.precio === "string" ? parseFloat(producto.precio) : Number(producto.precio);
+                const pps = Array.isArray(producto.producto_presentaciones) ? producto.producto_presentaciones : producto.producto_presentaciones ? [producto.producto_presentaciones] : [];
+                const primeraConOferta = [...pps].sort((a: { orden?: number }, b: { orden?: number }) => (a.orden ?? 0) - (b.orden ?? 0)).find((pp: { porcentaje_oferta?: number | null }) => pp.porcentaje_oferta != null && pp.porcentaje_oferta > 0);
+                const ofertaProd = producto.porcentaje_oferta != null && producto.porcentaje_oferta > 0;
+                const ofertaPorc = primeraConOferta?.porcentaje_oferta ?? (ofertaProd ? producto.porcentaje_oferta : 0) ?? 0;
+                const precioRef = primeraConOferta?.precio != null ? Number(primeraConOferta.precio) : precioBase;
+                const aplicaIva = (primeraConOferta as { aplica_iva?: boolean })?.aplica_iva ?? (producto as { aplica_iva?: boolean }).aplica_iva !== false;
+                const precioSinIva = ofertaPorc > 0 ? precioRef * (1 - ofertaPorc / 100) : precioRef;
+                const precioNum = aplicaIva ? precioSinIva * 1.19 : precioSinIva;
+                const badge = ofertaPorc > 0 ? `${ofertaPorc}% OFF` : "Destacado";
+                const imagen =
+                  producto.imagen ??
+                  IMAGENES_PLACEHOLDER[
+                    productosDestacados.indexOf(producto) % IMAGENES_PLACEHOLDER.length
+                  ];
+                return (
+                  <Link key={producto.id} href={`/producto/${producto.id}`}>
+                    <article className="card-lift overflow-hidden rounded-3xl border border-[#ece2ff] bg-white p-3 shadow-[0_10px_26px_rgba(123,31,162,0.12)]">
+                      <div className="relative aspect-square overflow-hidden rounded-2xl bg-slate-100">
+                        <span className={`absolute left-3 top-3 z-10 rounded-full px-3 py-1 text-[10px] font-black text-white ${badge.includes("%") ? "bg-[#ff6b35]" : "bg-[#63c132]"}`}>
+                          {badge}
+                        </span>
+                        <img
+                          src={imagen}
+                          alt={producto.nombre}
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                      <h3 className="mt-3 line-clamp-2 text-base font-bold text-slate-800">
+                        {producto.nombre}
+                      </h3>
+                      <div className="mt-1 flex items-center gap-2">
+                        {ofertaPorc > 0 && (
+                          <span className="text-sm text-slate-500 line-through">
+                            ${(aplicaIva ? precioRef * 1.19 : precioRef).toLocaleString("es-CO")}
+                          </span>
+                        )}
+                        <p className="text-2xl font-black text-[var(--ca-orange)]">
+                          ${precioNum.toLocaleString("es-CO")}
+                        </p>
+                      </div>
+                      <div className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[var(--ca-orange)] to-[#ff9b23] px-4 py-2 text-sm font-bold text-white transition hover:brightness-105">
+                        <ShoppingCart size={15} />
+                        Ver producto
+                      </div>
+                    </article>
+                  </Link>
+                );
+              })
+            )}
+          </div>
+        </section>
+
+        <section className="mt-8 rounded-[28px] border border-[#f0ddff] bg-white p-4 shadow-[0_12px_28px_rgba(123,31,162,0.1)] sm:p-6">
+          <h3 className="text-4xl font-black text-[var(--ca-purple)]">
+            ¿Por qué comprar con nosotros?
+          </h3>
+          <div className="mt-5 grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-2xl bg-[#fff8e8] p-3 text-center">
+                <Truck className="mx-auto text-[var(--ca-orange)]" />
+                <p className="mt-2 text-sm font-bold text-slate-700">Entrega en 24h</p>
+              </div>
+              <div className="rounded-2xl bg-[#e8f9dd] p-3 text-center">
+                <ShieldCheck className="mx-auto text-[#42b522]" />
+                <p className="mt-2 text-sm font-bold text-slate-700">Compras seguras</p>
+              </div>
+              <div className="rounded-2xl bg-[#f1e7ff] p-3 text-center">
+                <PackageCheck className="mx-auto text-[var(--ca-purple)]" />
+                <p className="mt-2 text-sm font-bold text-slate-700">Calidad premium</p>
+              </div>
+              <div className="rounded-2xl bg-[#ffeef8] p-3 text-center">
+                <PawPrint className="mx-auto text-[#f24a98]" />
+                <p className="mt-2 text-sm font-bold text-slate-700">Cuidamos cada detalle</p>
+              </div>
+            </div>
+            <div className="rounded-2xl bg-gradient-to-r from-[#fff8e8] to-[#f2ebff] p-4">
+              <p className="text-lg font-bold leading-7 text-slate-700">
+                Excelente servicio, mi perro ama sus productos y llegaron súper rápido.
+              </p>
+              <p className="mt-2 text-sm font-bold text-[var(--ca-purple)]">- Maria P.</p>
+            </div>
+          </div>
+        </section>
+
+        <footer className="mt-8 overflow-hidden rounded-[24px] bg-gradient-to-r from-[#6a1b9a] via-[#7b1fa2] to-[#8e24aa] text-white shadow-[0_18px_42px_rgba(106,27,154,0.35)]">
+          <div className="grid gap-6 p-5 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1.2fr] lg:p-7">
+            <div>
+              <h4 className="text-lg font-black">Contáctanos</h4>
+              <ul className="mt-3 space-y-2 text-sm text-white/90">
+                <li className="flex items-center gap-2">
+                  <MapPin size={14} />
+                  <span>Barrancabermeja, Colombia</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Phone size={14} />
+                  <span>311 234 5678</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <Mail size={14} />
+                  <span>info@petmarket.com</span>
+                </li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="text-lg font-black">Enlaces rápidos</h4>
+              <ul className="mt-3 space-y-2 text-sm text-white/90">
+                <li>Inicio</li>
+                <li>Tienda</li>
+                <li>Ofertas</li>
+                <li>Términos y condiciones</li>
+              </ul>
+            </div>
+
+            <div>
+              <h4 className="text-lg font-black">Síguenos</h4>
+              <ul className="mt-3 space-y-2 text-sm text-white/90">
+                <li className="flex items-center gap-2">
+                  <Facebook size={14} /> Facebook
+                </li>
+                <li className="flex items-center gap-2">
+                  <Instagram size={14} /> Instagram
+                </li>
+                <li className="flex items-center gap-2">
+                  <MessageCircle size={14} /> WhatsApp
+                </li>
+              </ul>
+            </div>
+
+            <div className="rounded-2xl bg-white/14 p-4 backdrop-blur">
+              <h4 className="text-lg font-black">Suscríbete</h4>
+              <p className="mt-1 text-sm text-white/90">
+                Recibe promociones y consejos para tu mascota.
+              </p>
+              <div className="mt-3 flex items-center gap-2 rounded-full bg-white p-1.5">
+                <input
+                  type="text"
+                  placeholder="Ingresa tu correo"
+                  className="w-full bg-transparent px-3 text-sm text-slate-700 outline-none"
+                />
+                <button className="rounded-full bg-[var(--ca-orange)] px-4 py-2 text-sm font-bold text-white">
+                  Suscribirme
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-white/20 px-4 py-3 text-center text-xs text-white/85">
+            © {new Date().getFullYear()} Pet Market Animal. Todos los derechos reservados.
+          </div>
+        </footer>
+
+        <a
+          href={`https://wa.me/${process.env.NEXT_PUBLIC_WHATSAPP_NUM || "573001234567"}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg shadow-green-500/40 transition hover:scale-110 hover:shadow-xl"
+          aria-label="Contactar por WhatsApp"
+        >
+          <MessageCircle size={28} strokeWidth={2} />
+        </a>
       </main>
     </div>
   );

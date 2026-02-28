@@ -1,0 +1,303 @@
+"use client";
+
+import { useCart } from "@/context/CartContext";
+import { ShoppingCart } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { ProductoGaleria } from "./ProductoGaleria";
+
+const IVA_PORCENTAJE = 19;
+
+type Presentacion = {
+  id: string;
+  nombre: string;
+  imagen: string | null;
+  precio: number | null;
+  orden: number;
+  porcentaje_oferta?: number | null;
+  aplica_iva?: boolean;
+};
+
+type Opcion = {
+  nombre: string;
+  precio: number;
+  precioOriginal: number;
+  porcentajeOferta: number;
+  imagenIndex: number;
+  aplicaIva?: boolean;
+};
+
+export function ProductoDetalle({
+  productId,
+  nombre,
+  precioBase,
+  aplicaIvaBase = true,
+  descripcion,
+  imagenes,
+  presentaciones,
+  badge,
+  porcentajeOfertaBase,
+  datosMedicamento,
+  datosAlimento,
+  datosJuguete,
+  peso,
+  dimensiones,
+}: {
+  productId: string;
+  nombre: string;
+  precioBase: number;
+  descripcion: string | null;
+  imagenes: { url: string; label?: string }[];
+  presentaciones: Presentacion[];
+  aplicaIvaBase?: boolean;
+  badge: string | null;
+  porcentajeOfertaBase?: number | null;
+  datosMedicamento: Record<string, string> | null;
+  datosAlimento: Record<string, string> | null;
+  datosJuguete: Record<string, string> | null;
+  peso: number | null;
+  dimensiones: string | null;
+}) {
+  const { addToCart } = useCart();
+  const router = useRouter();
+  const [agregado, setAgregado] = useState(false);
+  const sortedPresentaciones = [...presentaciones].sort((a, b) => a.orden - b.orden);
+
+  const ofertaPrincipal = porcentajeOfertaBase ?? 0;
+  const precioPrincipalBase = ofertaPrincipal > 0 ? precioBase * (1 - ofertaPrincipal / 100) : precioBase;
+  const precioPrincipalFinal = aplicaIvaBase ? precioPrincipalBase * (1 + IVA_PORCENTAJE / 100) : precioPrincipalBase;
+  const opciones: Opcion[] = [{
+    nombre: "Principal",
+    precio: precioPrincipalFinal,
+    precioOriginal: precioPrincipalBase,
+    porcentajeOferta: ofertaPrincipal,
+    imagenIndex: 0,
+    aplicaIva: aplicaIvaBase,
+  }];
+  let imgIdx = 1;
+  for (const p of sortedPresentaciones) {
+    const precioOrig = p.precio != null ? Number(p.precio) : precioBase;
+    const oferta = p.porcentaje_oferta ?? 0;
+    const precioBasePres = oferta > 0 ? precioOrig * (1 - oferta / 100) : precioOrig;
+    const aplicaIva = p.aplica_iva ?? aplicaIvaBase;
+    const precioFinal = aplicaIva ? precioBasePres * (1 + IVA_PORCENTAJE / 100) : precioBasePres;
+    const imagenIndex = p.imagen ? imgIdx++ : 0;
+    opciones.push({ nombre: p.nombre, precio: precioFinal, precioOriginal: precioBasePres, porcentajeOferta: oferta, imagenIndex, aplicaIva });
+  }
+
+  const [seleccionada, setSeleccionada] = useState(0);
+  const [imagenActiva, setImagenActiva] = useState(0);
+
+  const opcion = opciones[seleccionada];
+  const precioActual = opcion?.precio ?? precioBase;
+  const badgeOferta = opcion?.porcentajeOferta ? `${opcion.porcentajeOferta}% OFF` : null;
+  const badgeFinal = badgeOferta ?? badge;
+
+  const handleSeleccionar = (index: number) => {
+    setSeleccionada(index);
+    setImagenActiva(opciones[index]?.imagenIndex ?? 0);
+  };
+
+  const handleImagenChange = (imagenIndex: number) => {
+    setImagenActiva(imagenIndex);
+    const idx = opciones.findIndex((o) => o.imagenIndex === imagenIndex);
+    if (idx >= 0) setSeleccionada(idx);
+  };
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+      {/* Galería */}
+      <ProductoGaleria
+        imagenes={imagenes}
+        nombre={nombre}
+        badge={badgeFinal}
+        imagenInicial={imagenActiva}
+        onImagenChange={handleImagenChange}
+      />
+
+      {/* Info */}
+      <div className="flex flex-col">
+        <h1 className="text-2xl font-black text-[var(--ca-purple)] sm:text-3xl">
+          {nombre}
+        </h1>
+
+        {/* Precio destacado */}
+        <div className="mt-2 flex items-center gap-2">
+          {opcion?.porcentajeOferta ? (
+            <>
+              <span className="text-lg text-slate-500 line-through">
+                ${opcion.precioOriginal.toLocaleString("es-CO")}
+              </span>
+              <span className="text-3xl font-black text-[var(--ca-orange)]">
+                ${precioActual.toLocaleString("es-CO")}
+              </span>
+              {opcion.aplicaIva && (
+                <span className="text-xs text-slate-500">(IVA incl.)</span>
+              )}
+              <span className="rounded-full bg-[#ff6b35] px-2 py-0.5 text-xs font-bold text-white">
+                {opcion.porcentajeOferta}% OFF
+              </span>
+            </>
+          ) : (
+            <span className="flex items-center gap-2">
+              <span className="text-3xl font-black text-[var(--ca-orange)]">
+                ${precioActual.toLocaleString("es-CO")}
+              </span>
+              {opcion?.aplicaIva && (
+                <span className="text-xs text-slate-500">(IVA incl.)</span>
+              )}
+            </span>
+          )}
+        </div>
+
+        {/* Presentaciones - seleccionables */}
+        {opciones.length > 1 && (
+          <div className="mt-4">
+            <h3 className="mb-2 text-sm font-bold text-slate-600">
+              Elige presentación
+            </h3>
+            <div className="flex flex-wrap gap-2">
+              {opciones.map((op, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => handleSeleccionar(i)}
+                  className={`rounded-xl border-2 px-4 py-2.5 text-sm font-semibold transition ${
+                    seleccionada === i
+                      ? "border-[var(--ca-purple)] bg-[var(--ca-purple)]/10 text-[var(--ca-purple)]"
+                      : "border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300"
+                  }`}
+                >
+                  <span>{op.nombre}</span>
+                  {op.porcentajeOferta ? (
+                    <span className="ml-1.5">
+                      <span className="text-slate-400 line-through">${op.precioOriginal.toLocaleString("es-CO")}</span>
+                      <span className="ml-1 font-black text-[var(--ca-orange)]">${op.precio.toLocaleString("es-CO")}</span>
+                    </span>
+                  ) : (
+                    <span className="ml-1.5 font-black text-[var(--ca-orange)]">
+                      ${op.precio.toLocaleString("es-CO")}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Descripción */}
+        {descripcion && (
+          <div className="mt-4">
+            <h3 className="text-sm font-bold text-slate-600">Descripción</h3>
+            <p className="mt-1 whitespace-pre-wrap text-slate-700">{descripcion}</p>
+          </div>
+        )}
+
+        {/* Datos técnicos */}
+        {(datosMedicamento ||
+          datosAlimento ||
+          datosJuguete) && (
+          <div className="mt-4 space-y-3 rounded-xl border border-slate-200 bg-slate-50/50 p-4">
+            {datosMedicamento &&
+              Object.keys(datosMedicamento).length > 0 && (
+                <div>
+                  <h4 className="text-xs font-bold uppercase text-slate-500">
+                    Datos del medicamento
+                  </h4>
+                  <dl className="mt-1 grid gap-1 text-sm sm:grid-cols-2">
+                    {Object.entries(datosMedicamento).map(
+                      ([k, v]) =>
+                        v && (
+                          <div key={k} className="flex gap-2">
+                            <dt className="text-slate-500 capitalize">
+                              {k.replace(/_/g, " ")}:
+                            </dt>
+                            <dd className="font-medium">{v}</dd>
+                          </div>
+                        )
+                    )}
+                  </dl>
+                </div>
+              )}
+            {datosAlimento &&
+              Object.keys(datosAlimento).length > 0 && (
+                <div>
+                  <h4 className="text-xs font-bold uppercase text-slate-500">
+                    Datos del alimento
+                  </h4>
+                  <dl className="mt-1 grid gap-1 text-sm sm:grid-cols-2">
+                    {Object.entries(datosAlimento).map(
+                      ([k, v]) =>
+                        v && (
+                          <div key={k} className="flex gap-2">
+                            <dt className="text-slate-500 capitalize">
+                              {k.replace(/_/g, " ")}:
+                            </dt>
+                            <dd className="font-medium">{v}</dd>
+                          </div>
+                        )
+                    )}
+                  </dl>
+                </div>
+              )}
+            {datosJuguete &&
+              Object.keys(datosJuguete).length > 0 && (
+                <div>
+                  <h4 className="text-xs font-bold uppercase text-slate-500">
+                    Datos del juguete
+                  </h4>
+                  <dl className="mt-1 grid gap-1 text-sm sm:grid-cols-2">
+                    {Object.entries(datosJuguete).map(
+                      ([k, v]) =>
+                        v && (
+                          <div key={k} className="flex gap-2">
+                            <dt className="text-slate-500 capitalize">
+                              {k.replace(/_/g, " ")}:
+                            </dt>
+                            <dd className="font-medium">{v}</dd>
+                          </div>
+                        )
+                    )}
+                  </dl>
+                </div>
+              )}
+          </div>
+        )}
+
+        {/* Botones de pedido */}
+        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+          <button
+            type="button"
+            onClick={() => {
+              addToCart({
+                productId,
+                nombre,
+                presentacion: opcion?.nombre ?? "Principal",
+                precio: precioActual,
+                imagen: imagenes[imagenActiva]?.url ?? null,
+              });
+              setAgregado(true);
+              setTimeout(() => setAgregado(false), 2000);
+              router.push("/carrito");
+            }}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-full px-6 py-3.5 font-bold text-white shadow-lg transition ${
+              agregado
+                ? "bg-green-500 shadow-green-500/30"
+                : "bg-gradient-to-r from-[var(--ca-orange)] to-[#ff9b23] shadow-orange-300/40 hover:brightness-105"
+            }`}
+          >
+            <ShoppingCart size={20} />
+            {agregado ? "¡Agregado!" : "Agregar al carrito"}
+          </button>
+        </div>
+
+        {peso != null && (
+          <p className="mt-4 text-xs text-slate-500">
+            Peso: {peso} kg
+            {dimensiones && ` • ${dimensiones}`}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
