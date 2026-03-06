@@ -1,8 +1,8 @@
 "use client";
 
 import { useCart } from "@/context/CartContext";
-import { crearPedido } from "@/app/checkout/actions";
-import { Check, ChevronRight, Package, X } from "lucide-react";
+import { crearPedido, validarCupon } from "@/app/checkout/actions";
+import { Check, ChevronRight, Package, Tag, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -39,6 +39,9 @@ export function CheckoutModal({
   const [telefono, setTelefono] = useState("");
   const [direccion, setDireccion] = useState("");
   const [notas, setNotas] = useState("");
+  const [cuponCodigo, setCuponCodigo] = useState("");
+  const [cuponAplicado, setCuponAplicado] = useState<{ porcentaje: number } | null>(null);
+  const [cuponError, setCuponError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -68,9 +71,27 @@ export function CheckoutModal({
     setTelefono("");
     setDireccion("");
     setNotas("");
+    setCuponCodigo("");
+    setCuponAplicado(null);
+    setCuponError(null);
     setError(null);
     onClose();
   }
+
+  async function handleAplicarCupon() {
+    setCuponError(null);
+    if (!cuponCodigo.trim()) return;
+    const res = await validarCupon(cuponCodigo);
+    if (res.valid) {
+      setCuponAplicado({ porcentaje: res.porcentaje });
+    } else {
+      setCuponAplicado(null);
+      setCuponError(res.error);
+    }
+  }
+
+  const descuento = cuponAplicado ? total * (cuponAplicado.porcentaje / 100) : 0;
+  const totalConDescuento = total - descuento;
 
   function handleSiguiente() {
     setError(null);
@@ -101,16 +122,20 @@ export function CheckoutModal({
         precio: i.precio,
         cantidad: i.cantidad,
       })),
-      total
+      total,
+      cuponAplicado ? cuponCodigo.trim() : null
     );
     setLoading(false);
-    if (result?.error) {
+    if ("error" in result && result.error) {
       setError(result.error);
       return;
     }
     clearCart();
     onClose();
-    router.push(`/pedido/${result.pedidoId}`);
+    const tokenParam = result.tokenFactura
+      ? `?token=${encodeURIComponent(result.tokenFactura)}`
+      : "";
+    router.push(`/pedido/${result.pedidoId}${tokenParam}`);
   }
 
   return (
@@ -211,8 +236,47 @@ export function CheckoutModal({
                   </li>
                 ))}
               </ul>
+              {paso === 5 && (
+                <div className="mt-4 space-y-2 border-t border-slate-200 pt-4">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={cuponCodigo}
+                      onChange={(e) => {
+                        setCuponCodigo(e.target.value.toUpperCase());
+                        setCuponAplicado(null);
+                        setCuponError(null);
+                      }}
+                      placeholder="Código de cupón"
+                      maxLength={6}
+                      className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono uppercase"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAplicarCupon}
+                      className="rounded-lg border border-[var(--ca-purple)] px-3 py-2 text-sm font-bold text-[var(--ca-purple)] hover:bg-[var(--ca-purple)]/10"
+                    >
+                      <Tag size={16} className="inline" /> Aplicar
+                    </button>
+                  </div>
+                  {cuponError && <p className="text-sm text-red-600">{cuponError}</p>}
+                  {cuponAplicado && (
+                    <p className="text-sm font-semibold text-green-600">
+                      Cupón aplicado: -{cuponAplicado.porcentaje}%
+                    </p>
+                  )}
+                </div>
+              )}
+              <p className="mt-2 text-right text-sm text-slate-500">
+                Subtotal: ${total.toLocaleString("es-CO")}
+              </p>
+              {cuponAplicado && (
+                <p className="text-right text-sm text-green-600">
+                  Descuento ({cuponAplicado.porcentaje}%): -${descuento.toLocaleString("es-CO")}
+                </p>
+              )}
               <p className="text-right text-xl font-black text-[var(--ca-orange)]">
-                Total: ${total.toLocaleString("es-CO")}
+                Total: ${totalConDescuento.toLocaleString("es-CO")}
               </p>
               {error && (
                 <p className="rounded-lg bg-red-50 px-4 py-2 text-sm font-medium text-red-700">
@@ -255,7 +319,7 @@ export function CheckoutModal({
                 {items.length} producto{items.length !== 1 ? "s" : ""}
               </span>
               <span className="font-bold text-slate-700">
-                ${total.toLocaleString("es-CO")}
+                ${totalConDescuento.toLocaleString("es-CO")}
               </span>
             </div>
           </div>

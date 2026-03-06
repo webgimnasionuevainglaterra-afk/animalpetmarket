@@ -20,6 +20,7 @@ export type PedidoRastreo = {
     subtotal: number;
   }>;
   fecha_despacho?: string | null;
+  entrega_foto_url?: string | null;
 };
 
 export type HistorialPedido = {
@@ -82,6 +83,7 @@ export async function buscarPedidoPorNumero(
     estado: string;
     created_at: string;
     cliente_id: string | null;
+    entrega_foto_url?: string | null;
   } | null = null;
 
   if (tipo.esOrden) {
@@ -97,7 +99,8 @@ export async function buscarPedidoPorNumero(
         total,
         estado,
         created_at,
-        cliente_id
+        cliente_id,
+        entrega_foto_url
       `)
       .eq("numero_orden", tipo.num)
       .single();
@@ -123,7 +126,8 @@ export async function buscarPedidoPorNumero(
         total,
         estado,
         created_at,
-        cliente_id
+        cliente_id,
+        entrega_foto_url
       `)
       .neq("estado", "cancelado")
       .order("created_at", { ascending: false });
@@ -171,6 +175,7 @@ export async function buscarPedidoPorNumero(
       subtotal: typeof i.subtotal === "string" ? parseFloat(i.subtotal) : i.subtotal,
     })),
     fecha_despacho: venta?.fecha_venta ?? null,
+    entrega_foto_url: pedido.entrega_foto_url ?? null,
   };
 
   // Historial: todos los pedidos del mismo cliente (por cliente_id o telefono)

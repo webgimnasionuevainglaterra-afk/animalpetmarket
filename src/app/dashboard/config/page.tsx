@@ -1,12 +1,23 @@
-export default function ConfigPage() {
-  return (
-    <div>
-      <h1 className="text-2xl font-black text-[var(--ca-purple)]">
-        Configuración
-      </h1>
-      <p className="mt-2 text-slate-600">
-        Ajusta la configuración de tu tienda. (Próximamente)
-      </p>
-    </div>
-  );
+import { createAdminClient, createClient } from "@/lib/supabase/server";
+import { ConfigClient } from "./ConfigClient";
+
+export default async function ConfigPage() {
+  const [config, userEmail] = await Promise.all([
+    (async () => {
+      const supabase = createAdminClient();
+      const { data } = await supabase
+        .from("configuracion")
+        .select("nombre_tienda, telefono, whatsapp, email, direccion, facebook_url, instagram_url")
+        .eq("id", 1)
+        .maybeSingle();
+      return data;
+    })(),
+    (async () => {
+      const supabase = await createClient();
+      const { data } = await supabase.auth.getUser();
+      return data.user?.email ?? null;
+    })(),
+  ]);
+
+  return <ConfigClient config={config} userEmail={userEmail} />;
 }

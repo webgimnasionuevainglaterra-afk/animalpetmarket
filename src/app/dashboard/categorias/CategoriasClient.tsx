@@ -26,7 +26,7 @@ export function CategoriasClient({
     const formData = new FormData(form);
     const result = await crearCategoria(formData);
     setLoading(false);
-    if (result.error) {
+    if ("error" in result && result.error) {
       setError(result.error);
     } else {
       form.reset();
@@ -41,7 +41,7 @@ export function CategoriasClient({
     const formData = new FormData(form);
     const result = await actualizarCategoria(id, formData);
     setLoading(false);
-    if (result.error) {
+    if ("error" in result && result.error) {
       setError(result.error);
     } else {
       setEditingId(null);
@@ -54,7 +54,7 @@ export function CategoriasClient({
     setLoading(true);
     const result = await eliminarCategoria(id);
     setLoading(false);
-    if (result.error) setError(result.error);
+    if ("error" in result && result.error) setError(result.error);
   }
 
   return (

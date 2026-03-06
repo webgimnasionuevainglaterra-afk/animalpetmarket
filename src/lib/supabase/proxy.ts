@@ -2,13 +2,20 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({
-    request,
-  });
+  try {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+    if (!url || !key) {
+      return NextResponse.next({ request });
+    }
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    let supabaseResponse = NextResponse.next({
+      request,
+    });
+
+    const supabase = createServerClient(
+      url,
+      key,
     {
       cookies: {
         getAll() {
@@ -27,28 +34,35 @@ export async function updateSession(request: NextRequest) {
         },
       },
     }
-  );
+    );
 
-  let user: unknown = null;
-  let claimsOk = false;
-  try {
-    const { data } = await supabase.auth.getClaims();
-    user = data?.claims;
-    claimsOk = true;
+    let user: unknown = null;
+    let claimsOk = false;
+    const TIMEOUT_MS = 5000;
+    try {
+      const { data } = await Promise.race([
+        supabase.auth.getUser(),
+        new Promise<{ data: { user?: unknown } }>((_, reject) =>
+          setTimeout(() => reject(new Error("timeout")), TIMEOUT_MS)
+        ),
+      ]);
+      user = data?.user;
+      claimsOk = true;
+    } catch {
+      // Si Supabase falla o hace timeout, NO redirigir para evitar bucles
+    }
+
+    const isDashboard = request.nextUrl.pathname.startsWith("/dashboard");
+
+    // Proteger dashboard: sin usuario confirmado -> redirigir a login
+    if (isDashboard && claimsOk && !user) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/login";
+      return NextResponse.redirect(redirectUrl);
+    }
+
+    return supabaseResponse;
   } catch {
-    // Si Supabase falla, NO redirigir para evitar bucles
+    return NextResponse.next({ request });
   }
-
-  const isDashboard = request.nextUrl.pathname.startsWith("/dashboard");
-  const isLogin = request.nextUrl.pathname.startsWith("/login");
-
-  // Proteger dashboard: sin usuario confirmado -> redirigir a login
-  // (No redirigir login->dashboard para evitar bucles con cookies inconsistentes)
-  if (isDashboard && claimsOk && !user) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    return NextResponse.redirect(url);
-  }
-
-  return supabaseResponse;
 }

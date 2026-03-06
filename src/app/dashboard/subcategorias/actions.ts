@@ -1,6 +1,6 @@
 "use server";
 
-import { isValidUUID, validarLongitud } from "@/lib/validations";
+import { isValidUUID, sanitizarTexto, validarLongitud } from "@/lib/validations";
 import { createClient, requireAuth } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
@@ -28,7 +28,7 @@ export async function crearSubcategoria(formData: FormData) {
 
   const supabase = await createClient();
   const { error } = await supabase.from("subcategorias").insert({
-    nombre: nombre.trim(),
+    nombre: sanitizarTexto(nombre, MAX_NOMBRE),
     categoria_id,
   });
 
@@ -59,7 +59,7 @@ export async function actualizarSubcategoria(id: string, formData: FormData) {
   const supabase = await createClient();
   const { error } = await supabase
     .from("subcategorias")
-    .update({ nombre: nombre.trim(), categoria_id })
+    .update({ nombre: sanitizarTexto(nombre, MAX_NOMBRE), categoria_id })
     .eq("id", id);
 
   if (error) {

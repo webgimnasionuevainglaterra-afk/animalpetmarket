@@ -1,8 +1,10 @@
 "use client";
 
-import { ChevronDown, ChevronUp, History, MapPin, Phone, Printer, Search, User } from "lucide-react";
-import { useState } from "react";
-import { marcarPendiente, marcarDespachado, rechazarPedido } from "./actions";
+import { ChevronDown, ChevronUp, History, MapPin, Phone, Plus, Printer, Search, User, UserCheck } from "lucide-react";
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { marcarPendiente, marcarDespachado, rechazarPedido, asignarDomiciliario } from "./actions";
 import { FacturaImprimir } from "./FacturaImprimir";
 
 type PedidoItem = {
@@ -15,6 +17,8 @@ type PedidoItem = {
 
 type Venta = { fecha_venta: string } | { fecha_venta: string }[];
 
+type Domiciliario = { id: string; nombre: string };
+
 type Pedido = {
   id: string;
   numero_orden: number | null;
@@ -25,6 +29,11 @@ type Pedido = {
   total: number;
   estado: string;
   created_at: string;
+  vendedor_id?: string | null;
+  vendedor_nombre?: string | null;
+  domiciliario_id?: string | null;
+  domiciliario_nombre?: string | null;
+  entrega_foto_url?: string | null;
   pedido_items: PedidoItem[] | PedidoItem | null;
   ventas?: Venta | null;
 };
@@ -52,12 +61,30 @@ function getFechaDespacho(p: Pedido): string | null {
   return venta?.fecha_venta ?? null;
 }
 
-export function PedidosClient({ pedidos }: { pedidos: Pedido[] }) {
+export function PedidosClient({
+  pedidos,
+  domiciliarios = [],
+  esAdmin = false,
+}: {
+  pedidos: Pedido[];
+  domiciliarios?: Domiciliario[];
+  esAdmin?: boolean;
+}) {
   const [expandido, setExpandido] = useState<string | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filtro, setFiltro] = useState<FiltroTab>("pendientes");
   const [busqueda, setBusqueda] = useState("");
+  const [domiciliarioSeleccionado, setDomiciliarioSeleccionado] = useState<Record<string, string>>({});
+  const [asignadoMsg, setAsignadoMsg] = useState<string | null>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    if (asignadoMsg) {
+      const t = setTimeout(() => setAsignadoMsg(null), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [asignadoMsg]);
 
   const items = (p: Pedido) => {
     const i = p.pedido_items;
@@ -65,8 +92,8 @@ export function PedidosClient({ pedidos }: { pedidos: Pedido[] }) {
   };
 
   const pedidosPorFiltro = pedidos.filter((p) => {
-    if (filtro === "pendientes") return p.estado !== "despachado" && p.estado !== "cancelado";
-    if (filtro === "despachados") return p.estado === "despachado";
+    if (filtro === "pendientes") return !["despachado", "entregado", "cancelado"].includes(p.estado);
+    if (filtro === "despachados") return p.estado === "despachado" || p.estado === "entregado";
     return true;
   });
 
@@ -97,14 +124,15 @@ export function PedidosClient({ pedidos }: { pedidos: Pedido[] }) {
     setLoading(id);
     const result = await marcarPendiente(id);
     setLoading(null);
-    if (result?.error) setError(result.error);
+    if ("error" in result && result.error) setError(result.error);
   };
   const handleDespachado = async (id: string, total: number) => {
     setError(null);
     setLoading(id);
-    const result = await marcarDespachado(id, total);
+    const domiciliarioId = domiciliarioSeleccionado[id] || null;
+    const result = await marcarDespachado(id, total, domiciliarioId);
     setLoading(null);
-    if (result?.error) setError(result.error);
+    if ("error" in result && result.error) setError(result.error);
   };
   const handleRechazado = async (id: string) => {
     if (!confirm("¿Rechazar y eliminar este pedido?")) return;
@@ -112,18 +140,41 @@ export function PedidosClient({ pedidos }: { pedidos: Pedido[] }) {
     setLoading(id);
     const result = await rechazarPedido(id);
     setLoading(null);
-    if (result?.error) setError(result.error);
+    if ("error" in result && result.error) setError(result.error);
+  };
+
+  const handleAsignarDomiciliario = async (pedidoId: string, domiciliarioId: string | null) => {
+    setError(null);
+    setAsignadoMsg(null);
+    setLoading(pedidoId);
+    const result = await asignarDomiciliario(pedidoId, domiciliarioId);
+    setLoading(null);
+    if ("error" in result && result.error) {
+      setError(result.error);
+      return { success: false };
+    }
+    router.refresh();
+    return { success: true };
   };
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-black text-[var(--ca-purple)]">
-          Pedidos
-        </h1>
-        <p className="mt-2 text-slate-600">
-          Pedidos contra entrega. Los datos de entrega se guardan aquí.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-black text-[var(--ca-purple)]">
+            Pedidos
+          </h1>
+          <p className="mt-2 text-slate-600">
+            Pedidos contra entrega. Los datos de entrega se guardan aquí.
+          </p>
+        </div>
+        <Link
+          href="/dashboard/pedidos/crear"
+          className="flex items-center gap-2 rounded-xl bg-[var(--ca-purple)] px-4 py-2.5 text-sm font-bold text-white transition hover:brightness-110"
+        >
+          <Plus size={18} />
+          Crear pedido
+        </Link>
       </div>
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -184,6 +235,12 @@ export function PedidosClient({ pedidos }: { pedidos: Pedido[] }) {
         </div>
       )}
 
+      {asignadoMsg && (
+        <div className="fixed bottom-4 right-4 z-50 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-bold text-green-800 shadow-lg">
+          ✓ {asignadoMsg}
+        </div>
+      )}
+
       {pedidosFiltrados.length === 0 ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center">
           <p className="text-slate-500">
@@ -205,6 +262,7 @@ export function PedidosClient({ pedidos }: { pedidos: Pedido[] }) {
               dateStyle: "medium",
               timeStyle: "short",
             });
+            const esVendedor = Boolean(p.vendedor_id && p.vendedor_nombre);
             return (
               <div
                 key={p.id}
@@ -217,9 +275,17 @@ export function PedidosClient({ pedidos }: { pedidos: Pedido[] }) {
                 >
                   <div className="flex min-w-0 flex-1 items-center gap-4">
                     <div>
-                      <p className="font-bold text-slate-800">
-                        {formatNumeroOrden(p.numero_orden)} · {p.nombre_cliente}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-bold text-slate-800">
+                          {formatNumeroOrden(p.numero_orden)} · {p.nombre_cliente}
+                        </p>
+                        {esVendedor && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-[var(--ca-purple)]/15 px-2.5 py-0.5 text-xs font-semibold text-[var(--ca-purple)]">
+                            <UserCheck size={12} />
+                            {p.vendedor_nombre}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-sm text-slate-500">
                         {fecha}
                         {p.estado === "despachado" && getFechaDespacho(p) && (
@@ -255,6 +321,39 @@ export function PedidosClient({ pedidos }: { pedidos: Pedido[] }) {
 
                 {isOpen && (
                   <div className="border-t border-slate-100 bg-slate-50/50 p-4">
+                    {esVendedor && (
+                      <div className="mb-4 flex items-center gap-2 rounded-lg bg-[var(--ca-purple)]/10 px-3 py-2">
+                        <UserCheck size={18} className="text-[var(--ca-purple)]" />
+                        <span className="text-sm font-semibold text-[var(--ca-purple)]">
+                          Pedido del vendedor: {p.vendedor_nombre}
+                        </span>
+                      </div>
+                    )}
+                    {p.domiciliario_nombre && (
+                      <div className="mb-4 flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2">
+                        <UserCheck size={18} className="text-emerald-600" />
+                        <span className="text-sm font-semibold text-emerald-800">
+                          Domiciliario: {p.domiciliario_nombre}
+                        </span>
+                      </div>
+                    )}
+                    {p.entrega_foto_url && p.estado === "entregado" && (
+                      <div className="mb-4">
+                        <p className="mb-2 text-sm font-semibold text-slate-700">Foto de entrega</p>
+                        <a
+                          href={p.entrega_foto_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block"
+                        >
+                          <img
+                            src={p.entrega_foto_url}
+                            alt="Pedido entregado"
+                            className="max-h-48 rounded-lg border border-slate-200 object-cover"
+                          />
+                        </a>
+                      </div>
+                    )}
                     <div className="grid gap-4 sm:grid-cols-2">
                       <div className="space-y-2">
                         <p className="flex items-center gap-2 text-sm font-semibold text-slate-700">
@@ -305,6 +404,30 @@ export function PedidosClient({ pedidos }: { pedidos: Pedido[] }) {
                         </p>
                       </div>
                     </div>
+                    {esAdmin && p.estado !== "entregado" && p.estado !== "cancelado" && domiciliarios.length > 0 && (
+                      <div className="mb-4">
+                        <label className="mb-1 block text-sm font-semibold text-slate-700">
+                          {p.estado === "despachado" ? "Asignar domiciliario" : "Asignar domiciliario al despachar"}
+                        </label>
+                        <select
+                          value={domiciliarioSeleccionado[p.id] ?? p.domiciliario_id ?? ""}
+                          onChange={async (e) => {
+                            const val = e.target.value;
+                            setDomiciliarioSeleccionado((prev) => ({ ...prev, [p.id]: val }));
+                            const result = await handleAsignarDomiciliario(p.id, val || null);
+                            if (result?.success) setAsignadoMsg("Pedido asignado correctamente");
+                          }}
+                          className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                        >
+                          <option value="">Sin asignar</option>
+                          {domiciliarios.map((d) => (
+                            <option key={d.id} value={d.id}>
+                              {d.nombre}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
                     <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-200 pt-4">
                       <FacturaImprimir pedido={p} />
                       <button

@@ -1,11 +1,11 @@
 "use client";
 
 import { useCart } from "@/context/CartContext";
-import { Check, Package } from "lucide-react";
+import { Check, Package, Tag } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { crearPedido } from "./actions";
+import { crearPedido, validarCupon } from "./actions";
 
 export function CheckoutClient() {
   const router = useRouter();
@@ -14,10 +14,27 @@ export function CheckoutClient() {
   const [telefono, setTelefono] = useState("");
   const [direccion, setDireccion] = useState("");
   const [notas, setNotas] = useState("");
+  const [cuponCodigo, setCuponCodigo] = useState("");
+  const [cuponAplicado, setCuponAplicado] = useState<{ porcentaje: number } | null>(null);
+  const [cuponError, setCuponError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const total = getTotalPrecio();
+  const descuento = cuponAplicado ? total * (cuponAplicado.porcentaje / 100) : 0;
+  const totalConDescuento = total - descuento;
+
+  async function handleAplicarCupon() {
+    setCuponError(null);
+    if (!cuponCodigo.trim()) return;
+    const res = await validarCupon(cuponCodigo);
+    if (res.valid) {
+      setCuponAplicado({ porcentaje: res.porcentaje });
+    } else {
+      setCuponAplicado(null);
+      setCuponError(res.error);
+    }
+  }
 
   if (items.length === 0) {
     return (
@@ -145,11 +162,52 @@ export function CheckoutClient() {
               </li>
             ))}
           </ul>
-          <div className="mt-4 flex justify-between text-lg font-black">
-            <span>Total</span>
-            <span className="text-[var(--ca-orange)]">
-              ${total.toLocaleString("es-CO")}
-            </span>
+          <div className="mt-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={cuponCodigo}
+                onChange={(e) => {
+                  setCuponCodigo(e.target.value.toUpperCase());
+                  setCuponAplicado(null);
+                  setCuponError(null);
+                }}
+                placeholder="Código de cupón"
+                maxLength={6}
+                className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono uppercase"
+              />
+              <button
+                type="button"
+                onClick={handleAplicarCupon}
+                className="rounded-lg border border-[var(--ca-purple)] px-3 py-2 text-sm font-bold text-[var(--ca-purple)] hover:bg-[var(--ca-purple)]/10"
+              >
+                <Tag size={16} className="inline" /> Aplicar
+              </button>
+            </div>
+            {cuponError && <p className="text-sm text-red-600">{cuponError}</p>}
+            {cuponAplicado && (
+              <p className="text-sm font-semibold text-green-600">
+                Cupón aplicado: -{cuponAplicado.porcentaje}%
+              </p>
+            )}
+          </div>
+          <div className="mt-4 space-y-1">
+            <div className="flex justify-between text-sm text-slate-600">
+              <span>Subtotal</span>
+              <span>${total.toLocaleString("es-CO")}</span>
+            </div>
+            {cuponAplicado && (
+              <div className="flex justify-between text-sm text-green-600">
+                <span>Descuento ({cuponAplicado.porcentaje}%)</span>
+                <span>-${descuento.toLocaleString("es-CO")}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-lg font-black pt-2">
+              <span>Total</span>
+              <span className="text-[var(--ca-orange)]">
+                ${totalConDescuento.toLocaleString("es-CO")}
+              </span>
+            </div>
           </div>
 
           {error && (
@@ -177,22 +235,23 @@ export function CheckoutClient() {
                     precio: i.precio,
                     cantidad: i.cantidad,
                   })),
-                  total
+                  total,
+                  cuponAplicado ? cuponCodigo.trim() : null
                 );
                 setLoading(false);
-                if (result.error) {
+                if ("error" in result && result.error) {
                   setError(result.error);
                   return;
                 }
                 clearCart();
-                const ordenParam = result.numeroOrden
-                  ? `&orden=${encodeURIComponent(result.numeroOrden)}`
+                const tokenParam = result.tokenFactura
+                  ? `?token=${encodeURIComponent(result.tokenFactura)}`
                   : "";
-                router.push(`/?pedido=ok${ordenParam}`);
+                router.push(`/pedido/${result.pedidoId}${tokenParam}`);
               }}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[var(--ca-purple)] to-[#8e24aa] px-6 py-3.5 font-bold text-white shadow-lg shadow-purple-500/30 transition hover:brightness-110 disabled:opacity-60"
             >
-              <Check size={22} /            >
+              <Check size={22} />
               Finalizar compra
             </button>
             <Link

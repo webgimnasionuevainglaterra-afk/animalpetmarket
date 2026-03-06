@@ -46,7 +46,7 @@ type ProductoFormProps = {
     datos_juguete: Record<string, unknown> | null;
   };
   presentaciones?: { id: string; nombre: string; imagen: string | null; precio: number | null; orden: number; porcentaje_oferta?: number | null; aplica_iva?: boolean | null }[];
-  onSubmit: (formData: FormData) => Promise<{ error?: string }>;
+  onSubmit: (formData: FormData) => Promise<{ error?: string } | { success?: boolean }>;
   onCancel?: () => void;
   loading: boolean;
   submitLabel: string;
@@ -132,7 +132,7 @@ export function ProductoForm({
     }
 
     const result = await onSubmit(formData);
-    if (result.error) setError(result.error);
+    if ("error" in result && result.error) setError(result.error);
     else if (onCancel) onCancel();
   }
 

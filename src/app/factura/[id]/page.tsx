@@ -4,10 +4,16 @@ import { FacturaPrint } from "@/components/FacturaPrint";
 
 export default async function FacturaPublicaPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ token?: string }>;
 }) {
   const { id } = await params;
+  const { token } = await searchParams;
+
+  if (!token?.trim()) notFound();
+
   const supabase = createAdminClient();
 
   const { data: pedido } = await supabase
@@ -23,13 +29,15 @@ export default async function FacturaPublicaPage({
       total,
       estado,
       created_at,
+      token_factura,
       pedido_items (nombre, presentacion, cantidad, precio_unitario, subtotal, aplica_iva)
     `
     )
     .eq("id", id)
     .single();
 
-  if (!pedido) notFound();
+  if (!pedido || pedido.token_factura !== token.trim()) notFound();
 
-  return <FacturaPrint pedido={pedido} standalone />;
+  const { token_factura: _, ...pedidoSinToken } = pedido;
+  return <FacturaPrint pedido={pedidoSinToken} standalone />;
 }

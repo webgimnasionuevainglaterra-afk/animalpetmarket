@@ -20,7 +20,11 @@ export async function marcarPendiente(pedidoId: string) {
   return { success: true };
 }
 
-export async function marcarDespachado(pedidoId: string, total: number) {
+export async function marcarDespachado(
+  pedidoId: string,
+  total: number,
+  domiciliarioId?: string | null
+) {
   const auth = await requireAuth();
   if (auth.error) return auth;
   if (!isValidUUID(pedidoId)) return { error: "Pedido inválido" };
@@ -29,6 +33,7 @@ export async function marcarDespachado(pedidoId: string, total: number) {
   const { error } = await supabase.rpc("marcar_despachado_transaccional", {
     p_pedido_id: pedidoId,
     p_total: total,
+    p_domiciliario_id: domiciliarioId && isValidUUID(domiciliarioId) ? domiciliarioId : null,
   });
 
   if (error) return { error: error.message };
@@ -37,6 +42,25 @@ export async function marcarDespachado(pedidoId: string, total: number) {
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/inventario");
   revalidatePath("/dashboard/productos");
+  return { success: true };
+}
+
+export async function asignarDomiciliario(pedidoId: string, domiciliarioId: string | null) {
+  const auth = await requireAuth();
+  if (auth.error) return auth;
+  if (!isValidUUID(pedidoId)) return { error: "Pedido inválido" };
+  if (domiciliarioId && !isValidUUID(domiciliarioId)) return { error: "Domiciliario inválido" };
+
+  const supabase = createAdminClient();
+  const { error } = await supabase
+    .from("pedidos")
+    .update({ domiciliario_id: domiciliarioId || null })
+    .eq("id", pedidoId)
+    .in("estado", ["despachado", "pendiente", "confirmado", "enviado"]);
+
+  if (error) return { error: error.message };
+  revalidatePath("/dashboard/pedidos");
+  revalidatePath("/dashboard");
   return { success: true };
 }
 

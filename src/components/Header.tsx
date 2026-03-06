@@ -3,18 +3,27 @@
 import { useCart } from "@/context/CartContext";
 import { Menu, Search, ShoppingCart, X } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 const navItems = [
   { label: "Inicio", href: "/" },
   { label: "Tienda", href: "/tienda" },
   { label: "Ofertas", href: "/ofertas" },
-  { label: "Contacto", href: "/" },
+  { label: "Contacto", href: "/contacto" },
 ];
 
 export default function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const totalItems = useCart().getTotalItems();
+  const router = useRouter();
+
+  function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    const q = searchQuery.trim();
+    if (q) router.push(`/buscar?q=${encodeURIComponent(q)}`);
+  }
 
   return (
     <header className="mt-3 rounded-[24px] border border-white/80 bg-white p-3 shadow-[0_14px_35px_rgba(15,45,77,0.09)]">
@@ -29,7 +38,7 @@ export default function Header() {
           </button>
           <div className="flex justify-center lg:justify-start">
             <img
-              src="/img/logo.jpg"
+              src="/logo-centro-animal.JPG"
               alt="Pet Market Animal"
               className="h-[70px] w-auto object-contain sm:h-[90px] lg:h-[105px]"
             />
@@ -50,14 +59,16 @@ export default function Header() {
           </nav>
 
           <div className="flex items-center justify-center gap-2">
-            <div className="relative w-[280px] sm:w-[340px]">
+            <form onSubmit={handleSearch} className="relative w-[280px] sm:w-[340px]">
               <input
                 type="text"
-                placeholder="Search"
+                placeholder="Buscar productos..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="h-10 w-full rounded-full border border-slate-200 bg-slate-50 pl-10 pr-4 text-sm outline-none focus:border-[var(--ca-orange)]"
               />
               <Search size={16} className="absolute left-3 top-3 text-slate-400" />
-            </div>
+            </form>
             <Link
               href="/carrito"
               className="relative flex h-10 w-10 items-center justify-center rounded-full bg-[#fff6e7] text-[var(--ca-orange)] transition hover:brightness-95"
@@ -113,16 +124,18 @@ export default function Header() {
               </Link>
             ))}
           </nav>
-          <div className="mt-4">
+          <form onSubmit={handleSearch} className="mt-4">
             <div className="relative">
               <input
                 type="text"
                 placeholder="Buscar productos..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="h-10 w-full rounded-full border border-slate-200 bg-white pl-10 pr-4 text-sm outline-none focus:border-[var(--ca-orange)]"
               />
               <Search size={16} className="absolute left-3 top-3 text-slate-400" />
             </div>
-          </div>
+          </form>
         </div>
       )}
     </header>

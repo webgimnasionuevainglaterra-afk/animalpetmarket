@@ -30,7 +30,7 @@ export function SubcategoriasClient({
     const formData = new FormData(form);
     const result = await crearSubcategoria(formData);
     setLoading(false);
-    if (result.error) {
+    if ("error" in result && result.error) {
       setError(result.error);
     } else {
       form.reset();
@@ -45,7 +45,7 @@ export function SubcategoriasClient({
     const formData = new FormData(form);
     const result = await actualizarSubcategoria(id, formData);
     setLoading(false);
-    if (result.error) {
+    if ("error" in result && result.error) {
       setError(result.error);
     } else {
       setEditingId(null);
@@ -58,7 +58,7 @@ export function SubcategoriasClient({
     setLoading(true);
     const result = await eliminarSubcategoria(id);
     setLoading(false);
-    if (result.error) setError(result.error);
+    if ("error" in result && result.error) setError(result.error);
   }
 
   return (

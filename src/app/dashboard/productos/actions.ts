@@ -2,6 +2,7 @@
 
 import {
   isValidUUID,
+  sanitizarTexto,
   validarLongitud,
   validarNumero,
 } from "@/lib/validations";
@@ -30,6 +31,8 @@ export type Producto = {
   nuevo: boolean;
   mas_vendido: boolean;
   recomendado: boolean;
+  porcentaje_oferta?: number | null;
+  aplica_iva?: boolean | null;
   secciones_activas: string[];
   datos_medicamento: Record<string, unknown> | null;
   datos_alimento: Record<string, unknown> | null;
@@ -107,6 +110,9 @@ export async function crearProducto(formData: FormData) {
     if (errDesc) return { error: `Descripción: ${errDesc}` };
   }
 
+  const dim = (formData.get("dimensiones") as string) || "";
+  if (dim && dim.length > 100) return { error: "Dimensiones: máximo 100 caracteres" };
+
   const supabase = await createClient();
   const file = formData.get("imagen") as File | null;
   let imagen: string | null = null;
@@ -120,15 +126,15 @@ export async function crearProducto(formData: FormData) {
   const porcentajeOfertaVal = formData.get("porcentaje_oferta") as string;
   const porcentajeOferta = porcentajeOfertaVal ? parseInt(porcentajeOfertaVal, 10) : null;
   const insert: Record<string, unknown> = {
-    nombre: nombre.trim(),
-    descripcion: (formData.get("descripcion") as string) || null,
+    nombre: sanitizarTexto(nombre, MAX_NOMBRE),
+    descripcion: desc ? sanitizarTexto(desc, MAX_DESCRIPCION) : null,
     precio,
     aplica_iva: aplicaIva,
     imagen,
     subcategoria_id,
     porcentaje_oferta: porcentajeOferta != null && porcentajeOferta >= 1 && porcentajeOferta <= 99 ? porcentajeOferta : null,
     peso: formData.get("peso") ? parseFloat(formData.get("peso") as string) : null,
-    dimensiones: (formData.get("dimensiones") as string) || null,
+    dimensiones: dim ? sanitizarTexto(dim, 100) : null,
     requiere_refrigeracion: formData.get("requiere_refrigeracion") === "1",
     producto_fragil: formData.get("producto_fragil") === "1",
     destacado: formData.get("destacado") === "1",
@@ -154,14 +160,14 @@ export async function crearProducto(formData: FormData) {
   // Crear presentaciones (si no hay ninguna, crear "Principal" para que aparezca en inventario)
   let orden = 0;
   for (let i = 0; i < 50; i++) {
-    const nombre = (formData.get(`presentacion_${i}_nombre`) as string | null)?.trim();
-    if (nombre === undefined || nombre === null) break;
-    if (!nombre) continue;
-    const errPresNombre = validarLongitud(nombre, MAX_PRESENTACION_NOMBRE);
+    const nombrePres = (formData.get(`presentacion_${i}_nombre`) as string | null)?.trim();
+    if (nombrePres === undefined || nombrePres === null) break;
+    if (!nombrePres) continue;
+    const errPresNombre = validarLongitud(nombrePres, MAX_PRESENTACION_NOMBRE);
     if (errPresNombre) return { error: `Presentación ${i + 1}: ${errPresNombre}` };
     const precioVal = formData.get(`presentacion_${i}_precio`) as string;
-    const precio = precioVal ? parseFloat(precioVal) : null;
-    if (precio != null && (precio < 0 || precio > MAX_PRECIO)) return { error: `Presentación "${nombre}": precio inválido` };
+    const precioPres = precioVal ? parseFloat(precioVal) : null;
+    if (precioPres != null && (precioPres < 0 || precioPres > MAX_PRECIO)) return { error: `Presentación "${nombrePres}": precio inválido` };
     const file = formData.get(`presentacion_${i}_imagen`) as File | null;
     let imagen: string | null = null;
     if (file?.size) {
@@ -174,14 +180,14 @@ export async function crearProducto(formData: FormData) {
     const porcentajeOfertaPres = ofertaPresVal ? parseInt(ofertaPresVal, 10) : null;
     const { error: errPres } = await supabase.from("producto_presentaciones").insert({
       producto_id: productoId,
-      nombre,
+      nombre: sanitizarTexto(nombrePres, MAX_PRESENTACION_NOMBRE),
       imagen,
-      precio,
+      precio: precioPres,
       aplica_iva: aplicaIvaPres,
       porcentaje_oferta: porcentajeOfertaPres != null && porcentajeOfertaPres >= 1 && porcentajeOfertaPres <= 99 ? porcentajeOfertaPres : null,
       orden: orden++,
     });
-    if (errPres) return { error: `Error al crear presentación "${nombre}": ${errPres.message}` };
+    if (errPres) return { error: `Error al crear presentación "${nombrePres}": ${errPres.message}` };
   }
 
   // Si no se creó ninguna presentación, crear "Principal" para que el producto aparezca en inventario
@@ -222,6 +228,11 @@ export async function actualizarProducto(id: string, formData: FormData) {
   if (errPrecio) return { error: errPrecio };
   if (!isValidUUID(subcategoria_id)) return { error: "Subcategoría inválida" };
 
+  const descUpdate = (formData.get("descripcion") as string) || "";
+  if (descUpdate && descUpdate.length > MAX_DESCRIPCION) return { error: "Descripción: máximo 2000 caracteres" };
+  const dimUpdate = (formData.get("dimensiones") as string) || "";
+  if (dimUpdate && dimUpdate.length > 100) return { error: "Dimensiones: máximo 100 caracteres" };
+
   const supabase = await createClient();
   const file = formData.get("imagen") as File | null;
   let imagen: string | undefined;
@@ -235,14 +246,14 @@ export async function actualizarProducto(id: string, formData: FormData) {
   const porcentajeOfertaVal = formData.get("porcentaje_oferta") as string;
   const porcentajeOferta = porcentajeOfertaVal ? parseInt(porcentajeOfertaVal, 10) : null;
   const update: Record<string, unknown> = {
-    nombre: nombre.trim(),
-    descripcion: (formData.get("descripcion") as string) || null,
+    nombre: sanitizarTexto(nombre, MAX_NOMBRE),
+    descripcion: descUpdate ? sanitizarTexto(descUpdate, MAX_DESCRIPCION) : null,
     precio,
     aplica_iva: aplicaIva,
     porcentaje_oferta: porcentajeOferta != null && porcentajeOferta >= 1 && porcentajeOferta <= 99 ? porcentajeOferta : null,
     subcategoria_id,
     peso: formData.get("peso") ? parseFloat(formData.get("peso") as string) : null,
-    dimensiones: (formData.get("dimensiones") as string) || null,
+    dimensiones: dimUpdate ? sanitizarTexto(dimUpdate, 100) : null,
     requiere_refrigeracion: formData.get("requiere_refrigeracion") === "1",
     producto_fragil: formData.get("producto_fragil") === "1",
     destacado: formData.get("destacado") === "1",
@@ -266,14 +277,14 @@ export async function actualizarProducto(id: string, formData: FormData) {
 
   let orden = 0;
   for (let i = 0; i < 50; i++) {
-    const nombre = (formData.get(`presentacion_${i}_nombre`) as string | null)?.trim();
-    if (nombre === undefined || nombre === null) break;
-    if (!nombre) continue;
-    const errPresNombre = validarLongitud(nombre, MAX_PRESENTACION_NOMBRE);
+    const nombrePres = (formData.get(`presentacion_${i}_nombre`) as string | null)?.trim();
+    if (nombrePres === undefined || nombrePres === null) break;
+    if (!nombrePres) continue;
+    const errPresNombre = validarLongitud(nombrePres, MAX_PRESENTACION_NOMBRE);
     if (errPresNombre) return { error: `Presentación ${i + 1}: ${errPresNombre}` };
     const precioVal = formData.get(`presentacion_${i}_precio`) as string;
-    const precio = precioVal ? parseFloat(precioVal) : null;
-    if (precio != null && (precio < 0 || precio > MAX_PRECIO)) return { error: `Presentación "${nombre}": precio inválido` };
+    const precioPres = precioVal ? parseFloat(precioVal) : null;
+    if (precioPres != null && (precioPres < 0 || precioPres > MAX_PRECIO)) return { error: `Presentación "${nombrePres}": precio inválido` };
     const file = formData.get(`presentacion_${i}_imagen`) as File | null;
     let imagen: string | null = null;
     if (file?.size) {
@@ -289,14 +300,14 @@ export async function actualizarProducto(id: string, formData: FormData) {
     const porcentajeOfertaPres = ofertaPresVal ? parseInt(ofertaPresVal, 10) : null;
     const { error: errPres } = await supabase.from("producto_presentaciones").insert({
       producto_id: id,
-      nombre,
+      nombre: sanitizarTexto(nombrePres, MAX_PRESENTACION_NOMBRE),
       imagen,
-      precio,
+      precio: precioPres,
       aplica_iva: aplicaIvaPres,
       porcentaje_oferta: porcentajeOfertaPres != null && porcentajeOfertaPres >= 1 && porcentajeOfertaPres <= 99 ? porcentajeOfertaPres : null,
       orden: orden++,
     });
-    if (errPres) return { error: `Error al crear presentación "${nombre}": ${errPres.message}` };
+    if (errPres) return { error: `Error al crear presentación "${nombrePres}": ${errPres.message}` };
   }
 
   // Si no quedó ninguna presentación, crear "Principal" para que aparezca en inventario

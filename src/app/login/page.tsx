@@ -1,7 +1,7 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-import { PawPrint } from "lucide-react";
+import { Bike, PawPrint } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -44,7 +44,7 @@ export default function LoginPage() {
           <div className="bg-gradient-to-r from-[var(--ca-purple)] to-[#8e24aa] px-8 py-6 text-center">
             <Link href="/" className="inline-block">
               <img
-                src="/img/logo.jpg"
+                src="/logo-centro-animal.JPG"
                 alt="Pet Market Animal"
                 className="mx-auto h-16 w-auto rounded-full border-2 border-white object-cover shadow-lg"
               />
@@ -117,8 +117,19 @@ export default function LoginPage() {
               )}
             </button>
 
-            <p className="mt-4 text-center text-sm text-slate-500">
-              <Link href="/" className="font-semibold text-[var(--ca-purple)] hover:underline">
+            <Link
+              href="/login-domiciliario"
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 py-2.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100"
+            >
+              <Bike size={18} />
+              Acceso domiciliario
+            </Link>
+
+            <p className="mt-4 space-y-1 text-center text-sm text-slate-500">
+              <Link href="/recuperar-contrasena" className="block font-semibold text-[var(--ca-purple)] hover:underline">
+                ¿Olvidaste tu contraseña?
+              </Link>
+              <Link href="/" className="block font-semibold text-[var(--ca-purple)] hover:underline">
                 ← Volver al inicio
               </Link>
             </p>

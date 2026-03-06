@@ -1,25 +1,37 @@
 "use client";
 
 import {
+  BarChart3,
+  Bike,
   Boxes,
   LayoutDashboard,
   Layers,
+  Mail,
   Package,
   PawPrint,
   Settings,
   ShoppingBag,
+  Tag,
+  UserCircle,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const iconMap = {
+  BarChart3,
+  Bike,
   Boxes,
   LayoutDashboard,
   Layers,
+  Mail,
   Package,
   PawPrint,
   Settings,
   ShoppingBag,
+  Tag,
+  UserCircle,
+  Users,
 } as const;
 
 type NavItem = {
@@ -30,7 +42,7 @@ type NavItem = {
 
 export function DashboardNav({ item }: { item: NavItem }) {
   const pathname = usePathname();
-  const Icon = iconMap[item.iconName];
+  const Icon = iconMap[item.iconName] ?? Package;
   const isActive =
     item.href === "/dashboard"
       ? pathname === "/dashboard"

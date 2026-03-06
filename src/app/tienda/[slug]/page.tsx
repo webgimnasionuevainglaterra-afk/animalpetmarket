@@ -1,6 +1,8 @@
 import Header from "@/components/Header";
+import Footer from "@/components/Footer";
+import TopBar from "@/components/TopBar";
 import { createClient } from "@/lib/supabase/server";
-import { ArrowLeft, ChevronRight, Phone, Truck } from "lucide-react";
+import { ArrowLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -37,20 +39,7 @@ export default async function TiendaCategoriaPage({
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,#ffeef7,transparent_42%),#fff7ef] text-slate-800">
       <main className="mx-auto w-full max-w-[1260px] px-3 pb-6 pt-3 sm:px-6">
-        <div className="rounded-xl bg-[var(--ca-purple)] px-4 py-2.5 text-white shadow-md">
-          <div className="flex flex-col items-center justify-between gap-1 text-sm font-medium sm:flex-row sm:text-base">
-            <div className="flex items-center gap-2">
-              <Truck size={14} />
-              <span>Envío rápido y seguro</span>
-              <span className="hidden sm:inline">|</span>
-              <span>Soporte 24/7</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Phone size={14} />
-              <span>311 234 5678</span>
-            </div>
-          </div>
-        </div>
+        <TopBar />
 
         <Header />
 
@@ -100,6 +89,8 @@ export default async function TiendaCategoriaPage({
             </div>
           </div>
         </section>
+
+        <Footer />
       </main>
     </div>
   );

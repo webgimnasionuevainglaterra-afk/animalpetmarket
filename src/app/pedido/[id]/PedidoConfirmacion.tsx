@@ -1,7 +1,6 @@
 "use client";
 
 import { obtenerPedidoPorId, type PedidoResumen } from "@/app/checkout/actions";
-import Header from "@/components/Header";
 import { Check, Download, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -29,14 +28,17 @@ export function PedidoConfirmacion({ pedido }: { pedido: PedidoResumen }) {
   }
 
   function descargarFactura() {
-    window.open(`/factura/${pedidoActual.id}`, "_blank", "noopener");
+    const token = pedidoActual.token_factura;
+    if (!token) return;
+    window.open(
+      `/factura/${pedidoActual.id}?token=${encodeURIComponent(token)}`,
+      "_blank",
+      "noopener"
+    );
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#ffeef7,transparent_42%),#fff7ef] text-slate-800">
-      <main className="mx-auto w-full max-w-[1260px] px-3 pb-12 pt-3 sm:px-6">
-        <Header />
-        <div className="mx-auto mt-6 max-w-2xl">
+    <div className="mx-auto mt-6 max-w-2xl">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-lg sm:p-8">
           <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-center gap-3">
@@ -125,7 +127,9 @@ export function PedidoConfirmacion({ pedido }: { pedido: PedidoResumen }) {
             <button
               type="button"
               onClick={descargarFactura}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl border-2 border-[var(--ca-purple)] bg-[var(--ca-purple)]/10 px-6 py-3.5 font-bold text-[var(--ca-purple)] transition hover:bg-[var(--ca-purple)]/20"
+              disabled={!pedidoActual.token_factura}
+              title={!pedidoActual.token_factura ? "Factura no disponible" : undefined}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl border-2 border-[var(--ca-purple)] bg-[var(--ca-purple)]/10 px-6 py-3.5 font-bold text-[var(--ca-purple)] transition hover:bg-[var(--ca-purple)]/20 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Download size={22} />
               Descargar factura
@@ -138,8 +142,6 @@ export function PedidoConfirmacion({ pedido }: { pedido: PedidoResumen }) {
             </Link>
           </div>
         </div>
-        </div>
-      </main>
     </div>
   );
 }

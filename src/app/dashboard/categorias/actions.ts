@@ -1,6 +1,6 @@
 "use server";
 
-import { isValidUUID, validarLongitud } from "@/lib/validations";
+import { isValidUUID, sanitizarTexto, validarLongitud } from "@/lib/validations";
 import { createAdminClient, createClient, requireAuth } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
@@ -52,7 +52,7 @@ export async function crearCategoria(formData: FormData) {
   }
 
   const { error } = await supabase.from("categorias").insert({
-    nombre: nombre.trim(),
+    nombre: sanitizarTexto(nombre, MAX_NOMBRE),
     imagen,
   });
 
@@ -89,7 +89,7 @@ export async function actualizarCategoria(id: string, formData: FormData) {
     imagen = url;
   }
 
-  const update: { nombre: string; imagen?: string | null } = { nombre: nombre.trim() };
+  const update: { nombre: string; imagen?: string | null } = { nombre: sanitizarTexto(nombre, MAX_NOMBRE) };
   if (imagen !== undefined) update.imagen = imagen;
 
   const { error } = await supabase

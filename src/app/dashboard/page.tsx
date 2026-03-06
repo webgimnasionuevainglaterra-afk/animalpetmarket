@@ -10,6 +10,8 @@ import {
   TrendingUp,
   XCircle,
 } from "lucide-react";
+import { getDashboardContext } from "@/lib/roles";
+import { PedidosPorRepartirClient } from "./domiciliarios/PedidosPorRepartirClient";
 
 type LoteConProducto = {
   id: string;
@@ -52,6 +54,34 @@ function clasificarLotes(lotes: LoteConProducto[], hoy: string) {
 }
 
 export default async function DashboardPage() {
+  const ctx = await getDashboardContext();
+  if (ctx?.rol === "domiciliario" && ctx.domiciliarioId) {
+    const { createAdminClient } = await import("@/lib/supabase/server");
+    const supabase = createAdminClient();
+    const { data: pedidos } = await supabase
+      .from("pedidos")
+      .select(`
+        id,
+        numero_orden,
+        nombre_cliente,
+        telefono,
+        direccion,
+        notas,
+        total,
+        estado,
+        pedido_items (
+          nombre,
+          presentacion,
+          cantidad,
+          subtotal
+        )
+      `)
+      .eq("domiciliario_id", ctx.domiciliarioId)
+      .in("estado", ["pendiente", "confirmado", "enviado", "despachado"])
+      .order("created_at", { ascending: false });
+    return <PedidosPorRepartirClient pedidos={pedidos ?? []} />;
+  }
+
   const supabase = await createClient();
   const { data } = await supabase.auth.getUser();
   const user = data?.user;
@@ -91,7 +121,11 @@ export default async function DashboardPage() {
       0
     ) ?? 0;
 
-  const lotesData = (lotes ?? []) as LoteConProducto[];
+  const lotesData: LoteConProducto[] = (lotes ?? []).map((l: { producto_presentaciones?: { nombre: string; productos?: { nombre: string } | { nombre: string }[] } | { nombre: string; productos?: { nombre: string } | { nombre: string }[] }[] }) => {
+    const pp = Array.isArray(l.producto_presentaciones) ? l.producto_presentaciones[0] : l.producto_presentaciones;
+    const prod = pp?.productos ? (Array.isArray(pp.productos) ? pp.productos[0] : pp.productos) : null;
+    return { ...l, producto_presentaciones: pp ? { nombre: pp.nombre, productos: prod ? { nombre: prod.nombre } : null } : null } as LoteConProducto;
+  });
   const { vencidos, en1Mes, en2Meses, en3Meses } = clasificarLotes(lotesData, hoy);
 
   const stats = [

@@ -4,17 +4,45 @@ import { LogOut, Menu, X } from "lucide-react";
 import { useState } from "react";
 import { DashboardNav } from "./DashboardNav";
 
-const navItems = [
+const navItemsAdmin = [
   { href: "/dashboard", label: "Inicio", iconName: "LayoutDashboard" as const },
   { href: "/dashboard/categorias", label: "Categorías", iconName: "PawPrint" as const },
   { href: "/dashboard/subcategorias", label: "Subcategorías", iconName: "Layers" as const },
   { href: "/dashboard/productos", label: "Productos", iconName: "Package" as const },
   { href: "/dashboard/inventario", label: "Inventario", iconName: "Boxes" as const },
   { href: "/dashboard/pedidos", label: "Pedidos", iconName: "ShoppingBag" as const },
+  { href: "/dashboard/clientes", label: "Clientes", iconName: "UserCircle" as const },
+  { href: "/dashboard/vendedores", label: "Vendedores", iconName: "Users" as const },
+  { href: "/dashboard/domiciliarios", label: "Domiciliarios", iconName: "Bike" as const },
+  { href: "/dashboard/informes", label: "Informes", iconName: "BarChart3" as const },
+  { href: "/dashboard/newsletter", label: "Newsletter", iconName: "Mail" as const },
+  { href: "/dashboard/cupones", label: "Cupones", iconName: "Tag" as const },
   { href: "/dashboard/config", label: "Configuración", iconName: "Settings" as const },
 ];
 
-export function DashboardSidebar() {
+const navItemsVendedor = [
+  { href: "/dashboard", label: "Inicio", iconName: "LayoutDashboard" as const },
+  { href: "/dashboard/clientes", label: "Clientes", iconName: "UserCircle" as const },
+  { href: "/dashboard/pedidos", label: "Pedidos", iconName: "ShoppingBag" as const },
+];
+
+const navItemsDomiciliario = [
+  { href: "/dashboard", label: "Pedidos por repartir", iconName: "Bike" as const },
+];
+
+export function DashboardSidebar({
+  rol = "admin",
+  vendedorId,
+}: {
+  rol?: "admin" | "vendedor" | "domiciliario";
+  vendedorId?: string | null;
+}) {
+  const navItems =
+    rol === "vendedor"
+      ? navItemsVendedor
+      : rol === "domiciliario"
+        ? navItemsDomiciliario
+        : navItemsAdmin;
   const [open, setOpen] = useState(false);
 
   return (
@@ -44,7 +72,7 @@ export function DashboardSidebar() {
         <div className="flex h-16 items-center justify-between gap-2 border-b border-slate-100 px-4">
           <div className="flex items-center gap-2">
             <img
-              src="/img/logo.jpg"
+              src="/logo-centro-animal.JPG"
               alt="Logo"
               className="h-10 w-10 rounded-lg object-cover"
             />

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Package, LogOut, Plus, Search } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, LogOut, Package, Plus, Search } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { agregarLote, darSalidaLote } from "./actions";
 import { StickerLote } from "./StickerLote";
@@ -11,6 +11,8 @@ type Presentacion = {
   producto_id: string;
   productos: { id: string; nombre: string } | null;
 };
+
+const ITEMS_POR_PAGINA = 8;
 
 type Lote = {
   id: string;
@@ -45,6 +47,7 @@ export function InventarioClient({
   const [salidaError, setSalidaError] = useState<string | null>(null);
   const [agregarError, setAgregarError] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState("");
+  const [pagina, setPagina] = useState(1);
   const focoRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -65,7 +68,7 @@ export function InventarioClient({
     setLoading(true);
     const result = await agregarLote(productoPresentacionId, parseInt(cantidad, 10), fechaVencimiento);
     setLoading(false);
-    if (result?.error) {
+    if ("error" in result && result.error) {
       setAgregarError(result.error);
     } else {
       setCantidad("");
@@ -83,7 +86,7 @@ export function InventarioClient({
     setSalidaLoading(true);
     const result = await darSalidaLote(salidaLoteId, cant);
     setSalidaLoading(false);
-    if (result?.error) {
+    if ("error" in result && result.error) {
       setSalidaError(result.error);
     } else {
       setSalidaLoteId(null);
@@ -132,6 +135,11 @@ export function InventarioClient({
         );
       })
     : presentacionesConStock;
+
+  const totalPaginas = Math.ceil(presentacionesFiltradas.length / ITEMS_POR_PAGINA) || 1;
+  const paginaActual = Math.min(pagina, totalPaginas);
+  const inicio = (paginaActual - 1) * ITEMS_POR_PAGINA;
+  const presentacionesPaginadas = presentacionesFiltradas.slice(inicio, inicio + ITEMS_POR_PAGINA);
 
   return (
     <div className="space-y-6">
@@ -223,7 +231,10 @@ export function InventarioClient({
             <input
               type="search"
               value={busqueda}
-              onChange={(e) => setBusqueda(e.target.value)}
+              onChange={(e) => {
+                setBusqueda(e.target.value);
+                setPagina(1);
+              }}
               placeholder="Buscar producto, presentación o lote..."
               className="w-full rounded-xl border border-slate-200 py-2 pl-10 pr-4 text-sm outline-none transition focus:border-[var(--ca-purple)] focus:ring-2 focus:ring-[var(--ca-purple)]/20"
             />
@@ -236,8 +247,9 @@ export function InventarioClient({
               : "No hay presentaciones. Crea productos y presentaciones primero."}
           </div>
         ) : (
+          <>
           <div className="space-y-4">
-            {presentacionesFiltradas.map((p) => {
+            {presentacionesPaginadas.map((p) => {
               const prod = p.productos;
               const esFoco = focoPresentacionId === p.id;
               return (
@@ -354,7 +366,7 @@ export function InventarioClient({
                                       className="flex items-center gap-1 rounded border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50"
                                       title="Dar salida (descontar del inventario)"
                                     >
-                                      <LogOut size={12} /                                    >
+                                      <LogOut size={12} />
                                       Dar salida
                                     </button>
                                     </>
@@ -374,6 +386,35 @@ export function InventarioClient({
               );
             })}
           </div>
+          {presentacionesFiltradas.length > ITEMS_POR_PAGINA && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+              <p className="text-sm text-slate-500">
+                Mostrando {inicio + 1}-{Math.min(inicio + ITEMS_POR_PAGINA, presentacionesFiltradas.length)} de {presentacionesFiltradas.length} presentaciones
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setPagina((p) => Math.max(1, p - 1))}
+                  disabled={paginaActual <= 1}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Página anterior"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <span className="min-w-[100px] text-center text-sm font-medium text-slate-600">
+                  Página {paginaActual} de {totalPaginas}
+                </span>
+                <button
+                  onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
+                  disabled={paginaActual >= totalPaginas}
+                  className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label="Página siguiente"
+                >
+                  <ChevronRight size={18} />
+                </button>
+              </div>
+            </div>
+          )}
+          </>
         )}
       </div>
     </div>

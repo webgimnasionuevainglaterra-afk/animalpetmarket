@@ -138,6 +138,17 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
 export function useCart() {
   const ctx = useContext(CartContext);
-  if (!ctx) throw new Error("useCart debe usarse dentro de CartProvider");
+  if (!ctx) {
+    // Durante SSR o si el componente está fuera del provider, devolver valores por defecto
+    return {
+      items: [],
+      addToCart: () => {},
+      removeFromCart: () => {},
+      updateCantidad: () => {},
+      getTotalItems: () => 0,
+      getTotalPrecio: () => 0,
+      clearCart: () => {},
+    } as CartContextType;
+  }
   return ctx;
 }

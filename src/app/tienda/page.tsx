@@ -1,4 +1,5 @@
 import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 
@@ -76,6 +77,8 @@ export default async function TiendaPage() {
             )}
           </div>
         </section>
+
+        <Footer />
       </main>
     </div>
   );

@@ -122,6 +122,23 @@ export function RastrearPedido() {
               </p>
             </div>
             <div className="p-4">
+              {result.pedido.estado === "entregado" && result.pedido.entrega_foto_url && (
+                <div className="mb-4">
+                  <p className="mb-2 text-sm font-bold text-slate-700">Foto de entrega</p>
+                  <a
+                    href={result.pedido.entrega_foto_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block"
+                  >
+                    <img
+                      src={result.pedido.entrega_foto_url}
+                      alt="Pedido entregado"
+                      className="max-h-64 rounded-lg border border-slate-200 object-cover"
+                    />
+                  </a>
+                </div>
+              )}
               <p className="mb-2 text-sm font-bold text-slate-700">Productos</p>
               <ul className="space-y-1 text-sm">
                 {result.pedido.items.map((item, i) => (

@@ -7,12 +7,14 @@ import {
   type Producto,
   type ProductoPresentacion,
 } from "./actions";
-import { Pencil, Plus, Search, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { ProductoForm } from "./ProductoForm";
 
 type Subcategoria = { id: string; nombre: string; categoria_id: string };
 type Categoria = { id: string; nombre: string };
+const ITEMS_POR_PAGINA = 10;
+
 type ProductoRow = Producto & {
   stock?: number;
   subcategorias?:
@@ -44,12 +46,13 @@ export function ProductosClient({
   const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(false);
   const [busqueda, setBusqueda] = useState("");
+  const [pagina, setPagina] = useState(1);
 
   async function handleCreate(formData: FormData) {
     setLoading(true);
     const result = await crearProducto(formData);
     setLoading(false);
-    if (result.success) setCreating(false);
+    if ("success" in result && result.success) setCreating(false);
     return result;
   }
 
@@ -57,7 +60,7 @@ export function ProductosClient({
     setLoading(true);
     const result = await actualizarProducto(id, formData);
     setLoading(false);
-    if (result.success) setEditingId(null);
+    if ("success" in result && result.success) setEditingId(null);
     return result;
   }
 
@@ -83,6 +86,11 @@ export function ProductosClient({
         );
       })
     : productos;
+
+  const totalPaginas = Math.ceil(productosFiltrados.length / ITEMS_POR_PAGINA) || 1;
+  const paginaActual = Math.min(pagina, totalPaginas);
+  const inicio = (paginaActual - 1) * ITEMS_POR_PAGINA;
+  const productosPaginados = productosFiltrados.slice(inicio, inicio + ITEMS_POR_PAGINA);
 
   return (
     <div className="space-y-6">
@@ -165,7 +173,10 @@ export function ProductosClient({
           <input
             type="search"
             value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
+            onChange={(e) => {
+              setBusqueda(e.target.value);
+              setPagina(1);
+            }}
             placeholder="Buscar por nombre, descripción o subcategoría..."
             className="w-full rounded-xl border border-slate-200 py-2 pl-10 pr-4 text-sm outline-none transition focus:border-[var(--ca-purple)] focus:ring-2 focus:ring-[var(--ca-purple)]/20"
           />
@@ -195,7 +206,7 @@ export function ProductosClient({
                 </td>
               </tr>
             ) : (
-              productosFiltrados.map((p) => (
+              productosPaginados.map((p) => (
                 <tr key={p.id} className="border-t border-slate-100">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
@@ -246,6 +257,35 @@ export function ProductosClient({
           </tbody>
         </table>
       </div>
+
+      {productosFiltrados.length > ITEMS_POR_PAGINA && (
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <p className="text-sm text-slate-500">
+            Mostrando {inicio + 1}-{Math.min(inicio + ITEMS_POR_PAGINA, productosFiltrados.length)} de {productosFiltrados.length} productos
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPagina((p) => Math.max(1, p - 1))}
+              disabled={paginaActual <= 1}
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              aria-label="Página anterior"
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <span className="min-w-[100px] text-center text-sm font-medium text-slate-600">
+              Página {paginaActual} de {totalPaginas}
+            </span>
+            <button
+              onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
+              disabled={paginaActual >= totalPaginas}
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+              aria-label="Página siguiente"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

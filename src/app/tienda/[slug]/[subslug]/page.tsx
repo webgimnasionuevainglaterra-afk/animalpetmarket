@@ -1,4 +1,6 @@
 import Header from "@/components/Header";
+import Footer from "@/components/Footer";
+import TopBar from "@/components/TopBar";
 import { createClient } from "@/lib/supabase/server";
 import { ArrowLeft, ShoppingCart } from "lucide-react";
 import Link from "next/link";
@@ -53,12 +55,7 @@ export default async function TiendaSubcategoriaPage({
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,#ffeef7,transparent_42%),#fff7ef] text-slate-800">
       <main className="mx-auto w-full max-w-[1260px] px-3 pb-6 pt-3 sm:px-6">
-        <div className="rounded-xl bg-[var(--ca-purple)] px-4 py-2.5 text-white shadow-md">
-          <div className="flex flex-col items-center justify-between gap-1 text-sm font-medium sm:flex-row sm:text-base">
-            <span>Envío rápido y seguro</span>
-            <span>311 234 5678</span>
-          </div>
-        </div>
+        <TopBar />
 
         <Header />
 
@@ -153,6 +150,8 @@ export default async function TiendaSubcategoriaPage({
             </div>
           </div>
         </section>
+
+        <Footer />
       </main>
     </div>
   );
