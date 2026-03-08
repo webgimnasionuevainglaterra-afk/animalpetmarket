@@ -30,7 +30,7 @@ export default async function FacturaPublicaPage({
       estado,
       created_at,
       token_factura,
-      pedido_items (nombre, presentacion, cantidad, precio_unitario, subtotal, aplica_iva)
+      pedido_items (nombre, presentacion, cantidad, precio_unitario, subtotal, aplica_iva, iva_porcentaje)
     `
     )
     .eq("id", id)
@@ -38,6 +38,7 @@ export default async function FacturaPublicaPage({
 
   if (!pedido || pedido.token_factura !== token.trim()) notFound();
 
-  const { token_factura: _, ...pedidoSinToken } = pedido;
+  const pedidoSinToken = { ...pedido };
+  delete (pedidoSinToken as { token_factura?: string }).token_factura;
   return <FacturaPrint pedido={pedidoSinToken} standalone />;
 }

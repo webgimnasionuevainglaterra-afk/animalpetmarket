@@ -1,6 +1,7 @@
 "use server";
 
 import { isValidUUID, validarFecha, validarNumero } from "@/lib/validations";
+import { resolverIvaPorcentaje } from "@/lib/iva";
 import { createAdminClient, requireAuth } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
@@ -9,7 +10,7 @@ export async function asegurarPresentacionesPrincipales() {
   const supabase = createAdminClient();
   const { data: productos } = await supabase
     .from("productos")
-    .select("id, precio, aplica_iva, porcentaje_oferta");
+    .select("id, precio, aplica_iva, iva_porcentaje, porcentaje_oferta");
   const { data: presentaciones } = await supabase
     .from("producto_presentaciones")
     .select("producto_id");
@@ -17,14 +18,18 @@ export async function asegurarPresentacionesPrincipales() {
   const productosSinPresentacion = (productos ?? []).filter((p) => !idsConPresentacion.has(p.id));
   for (const prod of productosSinPresentacion) {
     const precio = typeof prod.precio === "string" ? parseFloat(prod.precio) : Number(prod.precio);
-    const aplicaIva = (prod as { aplica_iva?: boolean }).aplica_iva !== false;
+    const ivaPorcentaje = resolverIvaPorcentaje({
+      ivaPorcentaje: (prod as { iva_porcentaje?: number | null }).iva_porcentaje,
+      aplicaIva: (prod as { aplica_iva?: boolean }).aplica_iva,
+    });
     const porcentajeOferta = (prod as { porcentaje_oferta?: number | null }).porcentaje_oferta;
     await supabase.from("producto_presentaciones").insert({
       producto_id: prod.id,
       nombre: "Principal",
       imagen: null,
       precio,
-      aplica_iva: aplicaIva,
+      aplica_iva: ivaPorcentaje > 0,
+      iva_porcentaje: ivaPorcentaje,
       porcentaje_oferta: porcentajeOferta != null && porcentajeOferta >= 1 && porcentajeOferta <= 99 ? porcentajeOferta : null,
       orden: 0,
     });

@@ -1,5 +1,6 @@
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
+import { aplicarIva, resolverIvaPorcentaje } from "@/lib/iva";
 import { createClient } from "@/lib/supabase/server";
 import { ShoppingCart } from "lucide-react";
 import Link from "next/link";
@@ -21,9 +22,10 @@ export default async function OfertasPage() {
       nombre,
       precio,
       aplica_iva,
+      iva_porcentaje,
       imagen,
       porcentaje_oferta,
-      producto_presentaciones (id, nombre, precio, porcentaje_oferta, orden, aplica_iva)
+      producto_presentaciones (id, nombre, precio, porcentaje_oferta, orden, aplica_iva, iva_porcentaje)
     `)
     .order("nombre");
 
@@ -64,9 +66,14 @@ export default async function OfertasPage() {
                   const ofertaProd = p.porcentaje_oferta != null && p.porcentaje_oferta > 0;
                   const ofertaPorc = primeraConOferta?.porcentaje_oferta ?? (ofertaProd ? p.porcentaje_oferta : 0) ?? 0;
                   const precioRef = primeraConOferta?.precio != null ? Number(primeraConOferta.precio) : precioBase;
-                  const aplicaIva = (primeraConOferta as { aplica_iva?: boolean })?.aplica_iva ?? (p as { aplica_iva?: boolean }).aplica_iva !== false;
+                  const ivaPorcentaje = resolverIvaPorcentaje({
+                    ivaPorcentaje: (primeraConOferta as { iva_porcentaje?: number | null })?.iva_porcentaje,
+                    aplicaIva: (primeraConOferta as { aplica_iva?: boolean })?.aplica_iva,
+                    fallbackPorcentaje: (p as { iva_porcentaje?: number | null }).iva_porcentaje,
+                    fallbackAplicaIva: (p as { aplica_iva?: boolean }).aplica_iva,
+                  });
                   const precioSinIva = ofertaPorc > 0 ? precioRef * (1 - ofertaPorc / 100) : precioRef;
-                  const precioFinal = aplicaIva ? precioSinIva * 1.19 : precioSinIva;
+                  const precioFinal = aplicarIva(precioSinIva, ivaPorcentaje);
                   const imagen = p.imagen ?? IMAGENES_PLACEHOLDER[idx % IMAGENES_PLACEHOLDER.length];
 
                   return (
@@ -93,7 +100,7 @@ export default async function OfertasPage() {
                       <div className="mt-1 flex items-center gap-2">
                         {ofertaPorc > 0 && (
                           <span className="text-sm text-slate-500 line-through">
-                            ${(aplicaIva ? precioRef * 1.19 : precioRef).toLocaleString("es-CO")}
+                            ${aplicarIva(precioRef, ivaPorcentaje).toLocaleString("es-CO")}
                           </span>
                         )}
                         <p className="text-2xl font-black text-[var(--ca-orange)]">

@@ -1,0 +1,206 @@
+-- Soportar IVA configurable por producto/presentacion (0%, 5%, 19%)
+alter table productos
+  add column if not exists iva_porcentaje smallint;
+
+update productos
+set iva_porcentaje = case when coalesce(aplica_iva, true) then 19 else 0 end
+where iva_porcentaje is null;
+
+alter table productos
+  alter column iva_porcentaje set default 19;
+
+alter table productos
+  alter column iva_porcentaje set not null;
+
+alter table productos
+  drop constraint if exists productos_iva_porcentaje_check;
+
+alter table productos
+  add constraint productos_iva_porcentaje_check
+  check (iva_porcentaje in (0, 5, 19));
+
+comment on column productos.iva_porcentaje is 'Porcentaje de IVA del producto. Valores permitidos: 0, 5, 19.';
+
+alter table producto_presentaciones
+  add column if not exists iva_porcentaje smallint;
+
+update producto_presentaciones
+set iva_porcentaje = case
+  when aplica_iva is true then 19
+  when aplica_iva is false then 0
+  else null
+end
+where iva_porcentaje is null;
+
+alter table producto_presentaciones
+  drop constraint if exists producto_presentaciones_iva_porcentaje_check;
+
+alter table producto_presentaciones
+  add constraint producto_presentaciones_iva_porcentaje_check
+  check (iva_porcentaje in (0, 5, 19) or iva_porcentaje is null);
+
+comment on column producto_presentaciones.iva_porcentaje is 'Porcentaje de IVA de la presentación. Si es null, hereda de productos.iva_porcentaje.';
+
+alter table pedido_items
+  add column if not exists iva_porcentaje smallint;
+
+update pedido_items
+set iva_porcentaje = case when coalesce(aplica_iva, false) then 19 else 0 end
+where iva_porcentaje is null;
+
+alter table pedido_items
+  alter column iva_porcentaje set default 0;
+
+alter table pedido_items
+  alter column iva_porcentaje set not null;
+
+alter table pedido_items
+  drop constraint if exists pedido_items_iva_porcentaje_check;
+
+alter table pedido_items
+  add constraint pedido_items_iva_porcentaje_check
+  check (iva_porcentaje in (0, 5, 19));
+
+comment on column pedido_items.iva_porcentaje is 'Porcentaje de IVA incluido en el precio_unitario del item. Valores permitidos: 0, 5, 19.';
+
+create or replace function crear_pedido_transaccional(
+  p_nombre_cliente text,
+  p_telefono text,
+  p_direccion text,
+  p_notas text,
+  p_total decimal,
+  p_items jsonb,
+  p_cupon_codigo text default null,
+  p_vendedor_id uuid default null
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, extensions
+as $$
+declare
+  v_pedido_id uuid;
+  v_cliente_id uuid;
+  v_item jsonb;
+  v_subtotal decimal;
+  v_aplica_iva boolean;
+  v_iva_porcentaje smallint;
+  v_cupon_id uuid;
+  v_porcentaje smallint;
+  v_total_final decimal;
+begin
+  if nullif(trim(p_nombre_cliente), '') is null then
+    raise exception 'El nombre es obligatorio';
+  end if;
+  if nullif(trim(p_telefono), '') is null then
+    raise exception 'El teléfono es obligatorio';
+  end if;
+  if nullif(trim(p_direccion), '') is null then
+    raise exception 'La dirección es obligatoria';
+  end if;
+  if p_items is null or jsonb_array_length(p_items) = 0 then
+    raise exception 'El carrito está vacío';
+  end if;
+
+  v_total_final := p_total;
+
+  if nullif(trim(p_cupon_codigo), '') is not null then
+    select id, porcentaje into v_cupon_id, v_porcentaje
+    from cupones
+    where upper(trim(codigo)) = upper(trim(p_cupon_codigo))
+      and usado = false
+      and (valido_hasta is null or valido_hasta >= current_date)
+    limit 1;
+    if v_cupon_id is null then
+      raise exception 'Cupón inválido, ya utilizado o expirado';
+    end if;
+    v_total_final := p_total * (1 - v_porcentaje::decimal / 100);
+  end if;
+
+  insert into clientes (nombre, telefono, direccion, updated_at, vendedor_id)
+  values (
+    nullif(trim(p_nombre_cliente), ''),
+    nullif(trim(p_telefono), ''),
+    nullif(trim(p_direccion), ''),
+    now(),
+    p_vendedor_id
+  )
+  on conflict (telefono) do update set
+    nombre = excluded.nombre,
+    direccion = excluded.direccion,
+    updated_at = now(),
+    vendedor_id = coalesce(excluded.vendedor_id, clientes.vendedor_id)
+  returning id into v_cliente_id;
+
+  if v_cliente_id is null then
+    select id into v_cliente_id from clientes where telefono = nullif(trim(p_telefono), '') limit 1;
+  end if;
+
+  insert into pedidos (
+    nombre_cliente,
+    telefono,
+    direccion,
+    notas,
+    total,
+    estado,
+    cliente_id,
+    token_factura,
+    vendedor_id
+  ) values (
+    nullif(trim(p_nombre_cliente), ''),
+    nullif(trim(p_telefono), ''),
+    nullif(trim(p_direccion), ''),
+    nullif(trim(coalesce(p_notas, '')), ''),
+    v_total_final,
+    'pendiente',
+    v_cliente_id,
+    encode(gen_random_bytes(24), 'hex'),
+    p_vendedor_id
+  )
+  returning id into v_pedido_id;
+
+  if v_pedido_id is null then
+    raise exception 'No se pudo crear el pedido';
+  end if;
+
+  if v_cupon_id is not null then
+    update cupones set usado = true, pedido_id = v_pedido_id where id = v_cupon_id;
+  end if;
+
+  for v_item in select * from jsonb_array_elements(p_items)
+  loop
+    v_subtotal := (v_item->>'precio_unitario')::decimal * (v_item->>'cantidad')::int;
+    v_iva_porcentaje := coalesce((v_item->>'iva_porcentaje')::smallint,
+      case when coalesce((v_item->>'aplica_iva')::boolean, false) then 19 else 0 end
+    );
+    if v_iva_porcentaje not in (0, 5, 19) then
+      raise exception 'IVA inválido en uno de los ítems';
+    end if;
+    v_aplica_iva := v_iva_porcentaje > 0;
+
+    insert into pedido_items (
+      pedido_id,
+      producto_id,
+      nombre,
+      presentacion,
+      cantidad,
+      precio_unitario,
+      subtotal,
+      aplica_iva,
+      iva_porcentaje
+    ) values (
+      v_pedido_id,
+      (v_item->>'producto_id')::uuid,
+      v_item->>'nombre',
+      v_item->>'presentacion',
+      (v_item->>'cantidad')::int,
+      (v_item->>'precio_unitario')::decimal,
+      v_subtotal,
+      v_aplica_iva,
+      v_iva_porcentaje
+    );
+  end loop;
+
+  return v_pedido_id;
+end;
+$$;

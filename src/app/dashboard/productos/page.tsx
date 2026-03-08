@@ -12,6 +12,7 @@ export default async function ProductosPage() {
       descripcion,
       precio,
       aplica_iva,
+      iva_porcentaje,
       imagen,
       subcategoria_id,
       peso,
@@ -29,7 +30,7 @@ export default async function ProductosPage() {
       datos_juguete,
       created_at,
       subcategorias (nombre, categorias (nombre)),
-      producto_presentaciones (id, nombre, imagen, precio, orden, aplica_iva, porcentaje_oferta)
+      producto_presentaciones (id, nombre, imagen, precio, orden, aplica_iva, iva_porcentaje, porcentaje_oferta)
     `)
     .order("nombre");
 
@@ -51,7 +52,7 @@ export default async function ProductosPage() {
     }) ?? [];
   const ppIdsUniq = [...new Set(ppIds)];
 
-  let stockPorProducto: Record<string, number> = {};
+  const stockPorProducto: Record<string, number> = {};
   if (ppIdsUniq.length > 0) {
     const { data: lotes } = await supabase
       .from("inventario_lotes")

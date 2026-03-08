@@ -4,6 +4,7 @@ import TopBar from "@/components/TopBar";
 import { PedidoSuccessBanner } from "@/components/PedidoSuccessBanner";
 import { RastrearPedido } from "@/components/RastrearPedido";
 import { createClient } from "@/lib/supabase/server";
+import { aplicarIva, resolverIvaPorcentaje } from "@/lib/iva";
 import { Suspense } from "react";
 import Link from "next/link";
 import { WhatsAppFloatingButton } from "@/components/WhatsAppFloatingButton";
@@ -35,7 +36,8 @@ export default async function Home() {
     mas_vendido: boolean;
     nuevo: boolean;
     porcentaje_oferta?: number | null;
-    producto_presentaciones?: { precio?: number | null; porcentaje_oferta?: number | null; orden?: number; aplica_iva?: boolean } | { precio?: number | null; porcentaje_oferta?: number | null; orden?: number; aplica_iva?: boolean }[];
+    iva_porcentaje?: number | null;
+    producto_presentaciones?: { precio?: number | null; porcentaje_oferta?: number | null; orden?: number; aplica_iva?: boolean; iva_porcentaje?: number | null } | { precio?: number | null; porcentaje_oferta?: number | null; orden?: number; aplica_iva?: boolean; iva_porcentaje?: number | null }[];
     subcategorias?: { nombre: string; categorias?: { nombre: string } } | { nombre: string; categorias?: { nombre: string } }[];
   }[] = [];
 
@@ -49,13 +51,13 @@ export default async function Home() {
         .order("nombre"),
       supabase
         .from("productos")
-        .select("id, nombre, precio, aplica_iva, imagen, mas_vendido, nuevo, porcentaje_oferta, producto_presentaciones (precio, porcentaje_oferta, orden, aplica_iva), subcategorias (nombre, categorias (nombre))")
+        .select("id, nombre, precio, aplica_iva, iva_porcentaje, imagen, mas_vendido, nuevo, porcentaje_oferta, producto_presentaciones (precio, porcentaje_oferta, orden, aplica_iva, iva_porcentaje), subcategorias (nombre, categorias (nombre))")
         .eq("destacado", true)
         .order("nombre")
         .limit(12),
       supabase
         .from("productos")
-        .select("id, nombre, precio, aplica_iva, imagen, porcentaje_oferta, producto_presentaciones (precio, porcentaje_oferta, orden, aplica_iva), subcategorias (nombre, categorias (nombre))")
+        .select("id, nombre, precio, aplica_iva, iva_porcentaje, imagen, porcentaje_oferta, producto_presentaciones (precio, porcentaje_oferta, orden, aplica_iva, iva_porcentaje), subcategorias (nombre, categorias (nombre))")
         .order("nombre"),
     ]);
     const timeoutPromise = new Promise<never>((_, reject) =>
@@ -164,10 +166,15 @@ export default async function Home() {
                 const ofertaProd = producto.porcentaje_oferta != null && producto.porcentaje_oferta > 0;
                 const ofertaPorc = Number(primeraConOferta?.porcentaje_oferta ?? (ofertaProd ? producto.porcentaje_oferta : 0) ?? 0);
                 const precioRef = primeraConOferta?.precio != null ? Number(primeraConOferta.precio) : precioBase;
-                const aplicaIva = (primeraConOferta as { aplica_iva?: boolean })?.aplica_iva ?? (producto as { aplica_iva?: boolean }).aplica_iva !== false;
+                const ivaPorcentaje = resolverIvaPorcentaje({
+                  ivaPorcentaje: (primeraConOferta as { iva_porcentaje?: number | null })?.iva_porcentaje,
+                  aplicaIva: (primeraConOferta as { aplica_iva?: boolean })?.aplica_iva,
+                  fallbackPorcentaje: (producto as { iva_porcentaje?: number | null }).iva_porcentaje,
+                  fallbackAplicaIva: (producto as { aplica_iva?: boolean }).aplica_iva,
+                });
                 const precioSinIva = ofertaPorc > 0 ? precioRef * (1 - ofertaPorc / 100) : precioRef;
-                const precioNum = aplicaIva ? precioSinIva * 1.19 : precioSinIva;
-                const precioOriginal = aplicaIva ? precioRef * 1.19 : precioRef;
+                const precioNum = aplicarIva(precioSinIva, ivaPorcentaje);
+                const precioOriginal = aplicarIva(precioRef, ivaPorcentaje);
                 const imagen = producto.imagen ?? IMAGENES_PLACEHOLDER[productosEnOferta.indexOf(producto) % IMAGENES_PLACEHOLDER.length];
                 return (
                   <Link key={producto.id} href={`/producto/${producto.id}`}>
@@ -224,9 +231,14 @@ export default async function Home() {
                 const ofertaProd = producto.porcentaje_oferta != null && producto.porcentaje_oferta > 0;
                 const ofertaPorc = primeraConOferta?.porcentaje_oferta ?? (ofertaProd ? producto.porcentaje_oferta : 0) ?? 0;
                 const precioRef = primeraConOferta?.precio != null ? Number(primeraConOferta.precio) : precioBase;
-                const aplicaIva = (primeraConOferta as { aplica_iva?: boolean })?.aplica_iva ?? (producto as { aplica_iva?: boolean }).aplica_iva !== false;
+                const ivaPorcentaje = resolverIvaPorcentaje({
+                  ivaPorcentaje: (primeraConOferta as { iva_porcentaje?: number | null })?.iva_porcentaje,
+                  aplicaIva: (primeraConOferta as { aplica_iva?: boolean })?.aplica_iva,
+                  fallbackPorcentaje: (producto as { iva_porcentaje?: number | null }).iva_porcentaje,
+                  fallbackAplicaIva: (producto as { aplica_iva?: boolean }).aplica_iva,
+                });
                 const precioSinIva = ofertaPorc > 0 ? precioRef * (1 - ofertaPorc / 100) : precioRef;
-                const precioNum = aplicaIva ? precioSinIva * 1.19 : precioSinIva;
+                const precioNum = aplicarIva(precioSinIva, ivaPorcentaje);
                 const badge = ofertaPorc > 0 ? `${ofertaPorc}% OFF` : "Destacado";
                 const imagen =
                   producto.imagen ??
@@ -252,7 +264,7 @@ export default async function Home() {
                       <div className="mt-1 flex items-center gap-2">
                         {ofertaPorc > 0 && (
                           <span className="text-sm text-slate-500 line-through">
-                            ${(aplicaIva ? precioRef * 1.19 : precioRef).toLocaleString("es-CO")}
+                            ${aplicarIva(precioRef, ivaPorcentaje).toLocaleString("es-CO")}
                           </span>
                         )}
                         <p className="text-2xl font-black text-[var(--ca-orange)]">

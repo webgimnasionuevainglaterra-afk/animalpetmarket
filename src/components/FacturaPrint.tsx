@@ -1,5 +1,6 @@
 "use client";
 
+import { tieneIva } from "@/lib/iva";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
@@ -10,6 +11,7 @@ export type PedidoItem = {
   precio_unitario: number;
   subtotal: number;
   aplica_iva?: boolean;
+  iva_porcentaje?: number | null;
 };
 
 export type PedidoFactura = {
@@ -168,17 +170,30 @@ export function FacturaPrint({
         </table>
 
         {(() => {
-          const itemsConIva = items.filter((it) => (it as { aplica_iva?: boolean }).aplica_iva);
-          const totalIva = itemsConIva.reduce((sum, it) => {
-            const st = typeof it.subtotal === "string" ? parseFloat(it.subtotal) : it.subtotal;
-            return sum + (st - st / 1.19);
-          }, 0);
+          const totalesPorIva = items.reduce((acc, it) => {
+            const subtotalItem =
+              typeof it.subtotal === "string" ? parseFloat(it.subtotal) : it.subtotal;
+            const porcentaje = typeof it.iva_porcentaje === "number"
+              ? it.iva_porcentaje
+              : (it.aplica_iva ? 19 : 0);
+            if (!tieneIva(porcentaje)) return acc;
+            const ivaItem = subtotalItem - subtotalItem / (1 + porcentaje / 100);
+            acc[porcentaje] = (acc[porcentaje] ?? 0) + ivaItem;
+            return acc;
+          }, {} as Record<number, number>);
+          const totalIva = Object.values(totalesPorIva).reduce((sum, valor) => sum + valor, 0);
           const subtotalSinIva = total - totalIva;
-          const hayIva = totalIva > 0.01;
-          return hayIva ? (
+          const tasasIva = Object.entries(totalesPorIva)
+            .filter(([, valor]) => valor > 0.01)
+            .sort((a, b) => Number(b[0]) - Number(a[0]));
+          return tasasIva.length > 0 ? (
             <div className="mt-4 space-y-1 text-right text-sm">
               <p>Subtotal (sin IVA): ${subtotalSinIva.toLocaleString("es-CO")}</p>
-              <p>IVA 19%: ${totalIva.toLocaleString("es-CO")}</p>
+              {tasasIva.map(([porcentaje, valor]) => (
+                <p key={porcentaje}>
+                  IVA {porcentaje}%: ${valor.toLocaleString("es-CO")}
+                </p>
+              ))}
               <p className="text-lg font-black text-[var(--ca-orange)]">
                 Total: ${total.toLocaleString("es-CO")}
               </p>

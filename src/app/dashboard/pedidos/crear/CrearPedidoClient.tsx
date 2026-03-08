@@ -1,19 +1,19 @@
 "use client";
 
 import { crearPedidoDesdeDashboard, validarCupon } from "@/app/checkout/actions";
+import { aplicarIva, resolverIvaPorcentaje } from "@/lib/iva";
 import { ArrowLeft, Plus, Search, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-
-const IVA = 19;
 
 type Cliente = { id: string; nombre: string; telefono: string; direccion: string | null };
 type Producto = {
   id: string;
   nombre: string;
   aplica_iva: boolean;
-  producto_presentaciones: Array<{ id: string; nombre: string; precio: number; aplica_iva: boolean }>;
+  iva_porcentaje?: number | null;
+  producto_presentaciones: Array<{ id: string; nombre: string; precio: number; aplica_iva: boolean; iva_porcentaje?: number | null }>;
 };
 
 type ItemCarrito = {
@@ -23,6 +23,7 @@ type ItemCarrito = {
   precio: number;
   cantidad: number;
   aplica_iva: boolean;
+  iva_porcentaje: number;
 };
 
 export function CrearPedidoClient({
@@ -59,8 +60,13 @@ export function CrearPedidoClient({
   function agregarItem() {
     if (!prodSeleccionado || cantidad < 1) return;
     const { prod, pp } = prodSeleccionado;
-    const aplicaIva = pp.aplica_iva !== false && prod.aplica_iva !== false;
-    const precio = aplicaIva ? pp.precio * (1 + IVA / 100) : pp.precio;
+    const ivaPorcentaje = resolverIvaPorcentaje({
+      ivaPorcentaje: pp.iva_porcentaje,
+      aplicaIva: pp.aplica_iva,
+      fallbackPorcentaje: prod.iva_porcentaje,
+      fallbackAplicaIva: prod.aplica_iva,
+    });
+    const precio = aplicarIva(pp.precio, ivaPorcentaje);
     setItems((prev) => {
       const idx = prev.findIndex((i) => i.productId === prod.id && i.presentacion === pp.nombre);
       if (idx >= 0) {
@@ -68,7 +74,7 @@ export function CrearPedidoClient({
         next[idx].cantidad += cantidad;
         return next;
       }
-      return [...prev, { productId: prod.id, nombre: prod.nombre, presentacion: pp.nombre, precio, cantidad, aplica_iva: aplicaIva }];
+      return [...prev, { productId: prod.id, nombre: prod.nombre, presentacion: pp.nombre, precio, cantidad, aplica_iva: ivaPorcentaje > 0, iva_porcentaje: ivaPorcentaje }];
     });
     setProdSeleccionado(null);
     setCantidad(1);
@@ -114,6 +120,7 @@ export function CrearPedidoClient({
         precio: i.precio,
         cantidad: i.cantidad,
         aplica_iva: i.aplica_iva,
+        iva_porcentaje: i.iva_porcentaje,
       })),
       cuponAplicado ? cuponCodigo.trim() : null
     );
@@ -203,7 +210,15 @@ export function CrearPedidoClient({
               {productosFiltrados.map((p) =>
                 (p.producto_presentaciones ?? []).map((pp) => (
                   <option key={`${p.id}-${pp.nombre}`} value={`${p.id}::${pp.nombre}`}>
-                    {p.nombre} — {pp.nombre} (${(pp.aplica_iva !== false ? pp.precio * (1 + IVA / 100) : pp.precio).toLocaleString("es-CO")})
+                    {p.nombre} — {pp.nombre} (${aplicarIva(
+                      pp.precio,
+                      resolverIvaPorcentaje({
+                        ivaPorcentaje: pp.iva_porcentaje,
+                        aplicaIva: pp.aplica_iva,
+                        fallbackPorcentaje: p.iva_porcentaje,
+                        fallbackAplicaIva: p.aplica_iva,
+                      })
+                    ).toLocaleString("es-CO")})
                   </option>
                 ))
               )}

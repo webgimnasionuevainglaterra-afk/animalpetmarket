@@ -6,6 +6,7 @@ import {
   validarLongitud,
   validarTelefono,
 } from "@/lib/validations";
+import { aplicarIva, resolverIvaPorcentaje } from "@/lib/iva";
 import { createAdminClient, requireAuth } from "@/lib/supabase/server";
 import { getPerfil } from "@/lib/roles";
 import { revalidatePath } from "next/cache";
@@ -21,13 +22,13 @@ export type CartItemInput = {
   precio: number;
   cantidad: number;
   aplica_iva?: boolean;
+  iva_porcentaje?: number;
 };
-
-const IVA_PORCENTAJE = 19;
 
 type PrecioYStock = {
   precio: number;
   aplica_iva: boolean;
+  iva_porcentaje: number;
   nombre: string;
   productoPresentacionId: string | null;
 };
@@ -40,31 +41,42 @@ async function obtenerPrecioYPresentacion(
 ): Promise<PrecioYStock | null> {
   const { data: pp } = await supabase
     .from("producto_presentaciones")
-    .select("id, precio, aplica_iva, productos(nombre, aplica_iva)")
+    .select("id, precio, aplica_iva, iva_porcentaje, productos(nombre, aplica_iva, iva_porcentaje)")
     .eq("producto_id", productId)
     .eq("nombre", presentacion)
     .single();
 
   const nombreProd = pp ? (pp.productos as { nombre?: string } | null)?.nombre ?? "" : "";
   const ppId = pp?.id ?? null;
-  const prodAplicaIva = pp ? (pp.productos as { aplica_iva?: boolean } | null)?.aplica_iva !== false : true;
+  const prodInfo = pp ? (pp.productos as { aplica_iva?: boolean; iva_porcentaje?: number | null } | null) : null;
+  const prodIvaPorcentaje = resolverIvaPorcentaje({
+    ivaPorcentaje: prodInfo?.iva_porcentaje,
+    aplicaIva: prodInfo?.aplica_iva,
+  });
 
   if (pp?.precio != null) {
     const p = typeof pp.precio === "string" ? parseFloat(pp.precio) : Number(pp.precio);
-    const aplicaIva = pp.aplica_iva != null ? !!pp.aplica_iva : prodAplicaIva;
-    return { precio: p, aplica_iva: aplicaIva, nombre: nombreProd, productoPresentacionId: ppId };
+    const ivaPorcentaje = resolverIvaPorcentaje({
+      ivaPorcentaje: pp.iva_porcentaje,
+      aplicaIva: pp.aplica_iva,
+      fallbackPorcentaje: prodIvaPorcentaje,
+    });
+    return { precio: p, aplica_iva: ivaPorcentaje > 0, iva_porcentaje: ivaPorcentaje, nombre: nombreProd, productoPresentacionId: ppId };
   }
 
   const { data: prod } = await supabase
     .from("productos")
-    .select("precio, nombre, aplica_iva")
+    .select("precio, nombre, aplica_iva, iva_porcentaje")
     .eq("id", productId)
     .single();
 
   if (prod?.precio != null) {
     const p = typeof prod.precio === "string" ? parseFloat(prod.precio) : Number(prod.precio);
-    const aplicaIva = (prod as { aplica_iva?: boolean }).aplica_iva !== false;
-    return { precio: p, aplica_iva: aplicaIva, nombre: prod.nombre ?? nombreProd, productoPresentacionId: ppId };
+    const ivaPorcentaje = resolverIvaPorcentaje({
+      ivaPorcentaje: (prod as { iva_porcentaje?: number | null }).iva_porcentaje,
+      aplicaIva: (prod as { aplica_iva?: boolean }).aplica_iva,
+    });
+    return { precio: p, aplica_iva: ivaPorcentaje > 0, iva_porcentaje: ivaPorcentaje, nombre: prod.nombre ?? nombreProd, productoPresentacionId: ppId };
   }
 
   return null;
@@ -147,6 +159,7 @@ export async function crearPedido(
     precio: number;
     cantidad: number;
     aplica_iva: boolean;
+    iva_porcentaje: number;
   }> = [];
 
   for (const item of items) {
@@ -171,7 +184,7 @@ export async function crearPedido(
       }
     }
 
-    const precioFinal = info.aplica_iva ? info.precio * (1 + IVA_PORCENTAJE / 100) : info.precio;
+    const precioFinal = aplicarIva(info.precio, info.iva_porcentaje);
     itemsValidados.push({
       productId: item.productId,
       nombre: info.nombre || item.nombre,
@@ -179,6 +192,7 @@ export async function crearPedido(
       precio: precioFinal,
       cantidad: item.cantidad,
       aplica_iva: info.aplica_iva,
+      iva_porcentaje: info.iva_porcentaje,
     });
   }
 
@@ -196,6 +210,7 @@ export async function crearPedido(
     cantidad: i.cantidad,
     precio_unitario: i.precio,
     aplica_iva: i.aplica_iva,
+    iva_porcentaje: i.iva_porcentaje,
   }));
 
   const cupon = (cuponCodigo ?? "").trim() || null;
@@ -241,7 +256,39 @@ export async function crearPedidoDesdeDashboard(
   if (auth.error) return auth;
 
   const perfil = await getPerfil(auth.user!.id);
-  const vendedorId = perfil?.rol === "vendedor" ? perfil.vendedor_id : null;
+  let vendedorId: string | null = null;
+
+  if (perfil?.rol === "vendedor") {
+    if (!perfil.vendedor_id) {
+      return {
+        error:
+          "Tu usuario tiene rol de vendedor pero no está vinculado a un vendedor activo. Revisa la configuración del perfil.",
+      };
+    }
+
+    const supabase = createAdminClient();
+    const { data: vendedor, error: vendedorError } = await supabase
+      .from("vendedores")
+      .select("id, activo")
+      .eq("id", perfil.vendedor_id)
+      .single();
+
+    if (vendedorError || !vendedor?.id) {
+      return {
+        error:
+          "No se encontró el vendedor asociado a este usuario. Revisa la configuración del vendedor en el panel de administración.",
+      };
+    }
+
+    if (!vendedor.activo) {
+      return {
+        error:
+          "El vendedor asociado a este usuario está inactivo. Actívalo para poder registrar pedidos correctamente.",
+      };
+    }
+
+    vendedorId = vendedor.id;
+  }
 
   return crearPedido(nombre, telefono, direccion, notas, items, 0, cuponCodigo, vendedorId);
 }
@@ -257,7 +304,7 @@ export type PedidoResumen = {
   total: number;
   created_at: string;
   token_factura: string | null | undefined;
-  pedido_items: { nombre: string; presentacion: string; cantidad: number; precio_unitario: number; subtotal: number }[];
+  pedido_items: { nombre: string; presentacion: string; cantidad: number; precio_unitario: number; subtotal: number; aplica_iva?: boolean; iva_porcentaje?: number | null }[];
 };
 
 /** Obtiene un pedido por ID (ruta pública, sin auth). */
@@ -277,7 +324,7 @@ export async function obtenerPedidoPorId(pedidoId: string): Promise<PedidoResume
       total,
       created_at,
       token_factura,
-      pedido_items (nombre, presentacion, cantidad, precio_unitario, subtotal, aplica_iva)
+      pedido_items (nombre, presentacion, cantidad, precio_unitario, subtotal, aplica_iva, iva_porcentaje)
     `
     )
     .eq("id", pedidoId)

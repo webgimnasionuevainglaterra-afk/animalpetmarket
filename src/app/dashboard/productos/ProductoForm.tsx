@@ -1,5 +1,6 @@
 "use client";
 
+import { IVA_OPCIONES, IVA_POR_DEFECTO } from "@/lib/iva";
 import { ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 
@@ -10,6 +11,7 @@ type Presentacion = {
   precio?: string;
   porcentaje_oferta?: number | null;
   aplica_iva?: boolean | null;
+  iva_porcentaje?: number | null;
 };
 
 const SECCIONES = [
@@ -29,6 +31,7 @@ type ProductoFormProps = {
     descripcion: string | null;
     precio: number;
     aplica_iva?: boolean;
+    iva_porcentaje?: number | null;
     imagen: string | null;
     subcategoria_id: string;
     peso: number | null;
@@ -45,7 +48,7 @@ type ProductoFormProps = {
     datos_alimento: Record<string, unknown> | null;
     datos_juguete: Record<string, unknown> | null;
   };
-  presentaciones?: { id: string; nombre: string; imagen: string | null; precio: number | null; orden: number; porcentaje_oferta?: number | null; aplica_iva?: boolean | null }[];
+  presentaciones?: { id: string; nombre: string; imagen: string | null; precio: number | null; orden: number; porcentaje_oferta?: number | null; aplica_iva?: boolean | null; iva_porcentaje?: number | null }[];
   onSubmit: (formData: FormData) => Promise<{ error?: string } | { success?: boolean }>;
   onCancel?: () => void;
   loading: boolean;
@@ -74,13 +77,15 @@ export function ProductoForm({
       ? presentaciones
           .sort((a, b) => a.orden - b.orden)
           .map((p) => ({
+            id: p.id,
             nombre: p.nombre,
             imagen: p.imagen,
             precio: p.precio != null ? String(p.precio) : "",
             porcentaje_oferta: p.porcentaje_oferta ?? null,
             aplica_iva: p.aplica_iva ?? null,
+            iva_porcentaje: p.iva_porcentaje ?? (p.aplica_iva === false ? 0 : IVA_POR_DEFECTO),
           }))
-      : [{ nombre: "", imagen: null, precio: "", aplica_iva: null }]
+      : [{ nombre: "", imagen: null, precio: "", aplica_iva: null, iva_porcentaje: IVA_POR_DEFECTO }]
   );
 
   const toggleSeccion = (id: SeccionId) => {
@@ -90,7 +95,7 @@ export function ProductoForm({
   };
 
   const agregarPresentacion = () => {
-    setPresentacionesList((prev) => [...prev, { nombre: "", imagen: null, precio: "", aplica_iva: null }]);
+    setPresentacionesList((prev) => [...prev, { nombre: "", imagen: null, precio: "", aplica_iva: null, iva_porcentaje: IVA_POR_DEFECTO }]);
   };
 
   const quitarPresentacion = (i: number) => {
@@ -220,18 +225,20 @@ export function ProductoForm({
             />
             <span className="ml-2 text-xs text-slate-500">(aparece en ofertas)</span>
           </div>
-          <div className="flex items-end">
-            <label className="flex cursor-pointer items-center gap-2">
-              <input
-                type="checkbox"
-                name="aplica_iva"
-                value="1"
-                defaultChecked={producto?.aplica_iva !== false}
-                className="rounded"
-              />
-              <span className="text-sm font-medium">Incluir IVA 19%</span>
-            </label>
-            <span className="ml-2 text-xs text-slate-500">(recomendado)</span>
+          <div>
+            <label className="mb-1 block text-sm font-semibold">IVA</label>
+            <select
+              name="iva_porcentaje"
+              defaultValue={String(producto?.iva_porcentaje ?? (producto?.aplica_iva === false ? 0 : IVA_POR_DEFECTO))}
+              className="h-10 rounded-lg border border-slate-200 px-3 text-sm"
+            >
+              {IVA_OPCIONES.map((iva) => (
+                <option key={iva} value={iva}>
+                  {iva === 0 ? "Sin IVA" : `IVA ${iva}%`}
+                </option>
+              ))}
+            </select>
+            <span className="ml-2 text-xs text-slate-500">(por defecto 19%)</span>
           </div>
         </div>
         <div>
@@ -323,6 +330,9 @@ export function ProductoForm({
               key={i}
               className="flex flex-wrap items-end gap-4 rounded-lg border border-slate-200 bg-white p-4"
             >
+              {p.id && (
+                <input type="hidden" name={`presentacion_${i}_id`} value={p.id} />
+              )}
               <div className="min-w-[120px] flex-1">
                 <label className="mb-1 block text-xs font-medium text-slate-600">
                   Nombre (ej: 500g)
@@ -380,17 +390,34 @@ export function ProductoForm({
                   className="h-9 w-full rounded-lg border border-slate-200 px-3 text-sm"
                 />
               </div>
-              <div className="flex items-end pb-1">
-                <label className="flex cursor-pointer items-center gap-1.5">
-                  <input
-                    type="checkbox"
-                    name={`presentacion_${i}_aplica_iva`}
-                    value="1"
-                    defaultChecked={p.aplica_iva !== false}
-                    className="rounded"
-                  />
-                  <span className="text-xs font-medium text-slate-600">IVA 19%</span>
+              <div className="min-w-[120px]">
+                <label className="mb-1 block text-xs font-medium text-slate-600">
+                  IVA
                 </label>
+                <select
+                  name={`presentacion_${i}_iva_porcentaje`}
+                  value={String(p.iva_porcentaje ?? (p.aplica_iva === false ? 0 : IVA_POR_DEFECTO))}
+                  onChange={(e) =>
+                    setPresentacionesList((prev) =>
+                      prev.map((x, j) =>
+                        j === i
+                          ? {
+                              ...x,
+                              iva_porcentaje: parseInt(e.target.value, 10),
+                              aplica_iva: parseInt(e.target.value, 10) > 0,
+                            }
+                          : x
+                      )
+                    )
+                  }
+                  className="h-9 w-full rounded-lg border border-slate-200 px-3 text-sm"
+                >
+                  {IVA_OPCIONES.map((iva) => (
+                    <option key={iva} value={iva}>
+                      {iva === 0 ? "Sin IVA" : `${iva}%`}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="min-w-[140px]">
                 <label className="mb-1 block text-xs font-medium text-slate-600">

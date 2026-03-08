@@ -6,6 +6,7 @@ import {
   validarLongitud,
   validarNumero,
 } from "@/lib/validations";
+import { IVA_OPCIONES, IVA_POR_DEFECTO } from "@/lib/iva";
 import { createAdminClient, createClient, requireAuth } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
@@ -33,6 +34,7 @@ export type Producto = {
   recomendado: boolean;
   porcentaje_oferta?: number | null;
   aplica_iva?: boolean | null;
+  iva_porcentaje?: number | null;
   secciones_activas: string[];
   datos_medicamento: Record<string, unknown> | null;
   datos_alimento: Record<string, unknown> | null;
@@ -47,6 +49,20 @@ export type ProductoPresentacion = {
   imagen: string | null;
   precio: number | null;
   orden: number;
+  porcentaje_oferta?: number | null;
+  aplica_iva?: boolean | null;
+  iva_porcentaje?: number | null;
+};
+
+type PresentacionFormInput = {
+  id?: string;
+  nombre: string;
+  imagen: string | null;
+  precio: number | null;
+  orden: number;
+  porcentaje_oferta: number | null;
+  aplica_iva: boolean;
+  iva_porcentaje: number;
 };
 
 async function subirImagen(file: File): Promise<{ url: string } | { error: string }> {
@@ -88,6 +104,80 @@ function parseSecciones(formData: FormData): string[] {
   return secciones.filter(Boolean);
 }
 
+function parseIvaPorcentaje(
+  valor: FormDataEntryValue | null,
+  campo: string
+): { ivaPorcentaje: number; aplicaIva: boolean } | { error: string } {
+  const texto = String(valor ?? "").trim();
+  const porcentaje = texto ? parseInt(texto, 10) : IVA_POR_DEFECTO;
+  if (!IVA_OPCIONES.includes(porcentaje as (typeof IVA_OPCIONES)[number])) {
+    return { error: `${campo}: selecciona un IVA válido` };
+  }
+  return { ivaPorcentaje: porcentaje, aplicaIva: porcentaje > 0 };
+}
+
+async function extraerPresentacionesDesdeFormData(
+  formData: FormData
+): Promise<{ presentaciones: PresentacionFormInput[] } | { error: string }> {
+  const presentaciones: PresentacionFormInput[] = [];
+
+  for (let i = 0; i < 50; i++) {
+    const nombreRaw = formData.get(`presentacion_${i}_nombre`);
+    if (nombreRaw === null) break;
+
+    const nombrePres = String(nombreRaw).trim();
+    if (!nombrePres) continue;
+
+    const errPresNombre = validarLongitud(nombrePres, MAX_PRESENTACION_NOMBRE);
+    if (errPresNombre) return { error: `Presentación ${i + 1}: ${errPresNombre}` };
+
+    const precioVal = formData.get(`presentacion_${i}_precio`) as string;
+    const precioPres = precioVal ? parseFloat(precioVal) : null;
+    if (precioPres != null && (precioPres < 0 || precioPres > MAX_PRECIO)) {
+      return { error: `Presentación "${nombrePres}": precio inválido` };
+    }
+
+    const file = formData.get(`presentacion_${i}_imagen`) as File | null;
+    let imagen: string | null = null;
+    if (file?.size) {
+      const res = await subirImagen(file);
+      if ("error" in res) return { error: `Presentación ${i + 1} imagen: ${res.error}` };
+      if ("url" in res && res.url) imagen = res.url;
+    } else {
+      const urlExistente = formData.get(`presentacion_${i}_imagen_url`) as string | null;
+      imagen = urlExistente?.trim() ? urlExistente : null;
+    }
+
+    const idRaw = formData.get(`presentacion_${i}_id`) as string | null;
+    const id = idRaw?.trim() ? idRaw : undefined;
+    if (id && !isValidUUID(id)) return { error: `Presentación "${nombrePres}": ID inválido` };
+
+    const ivaPresResult = parseIvaPorcentaje(
+      formData.get(`presentacion_${i}_iva_porcentaje`),
+      `Presentación ${i + 1}`
+    );
+    if ("error" in ivaPresResult) return ivaPresResult;
+    const ofertaPresVal = formData.get(`presentacion_${i}_oferta`) as string;
+    const porcentajeOfertaPres = ofertaPresVal ? parseInt(ofertaPresVal, 10) : null;
+
+    presentaciones.push({
+      id,
+      nombre: sanitizarTexto(nombrePres, MAX_PRESENTACION_NOMBRE),
+      imagen,
+      precio: precioPres,
+      aplica_iva: ivaPresResult.aplicaIva,
+      iva_porcentaje: ivaPresResult.ivaPorcentaje,
+      porcentaje_oferta:
+        porcentajeOfertaPres != null && porcentajeOfertaPres >= 1 && porcentajeOfertaPres <= 99
+          ? porcentajeOfertaPres
+          : null,
+      orden: presentaciones.length,
+    });
+  }
+
+  return { presentaciones };
+}
+
 export async function crearProducto(formData: FormData) {
   const auth = await requireAuth();
   if (auth.error) return auth;
@@ -113,6 +203,9 @@ export async function crearProducto(formData: FormData) {
   const dim = (formData.get("dimensiones") as string) || "";
   if (dim && dim.length > 100) return { error: "Dimensiones: máximo 100 caracteres" };
 
+  const presentacionesResult = await extraerPresentacionesDesdeFormData(formData);
+  if ("error" in presentacionesResult) return presentacionesResult;
+
   const supabase = await createClient();
   const file = formData.get("imagen") as File | null;
   let imagen: string | null = null;
@@ -122,7 +215,9 @@ export async function crearProducto(formData: FormData) {
     imagen = res.url || null;
   }
 
-  const aplicaIva = formData.get("aplica_iva") === "1";
+  const ivaProductoResult = parseIvaPorcentaje(formData.get("iva_porcentaje"), "IVA");
+  if ("error" in ivaProductoResult) return ivaProductoResult;
+  const aplicaIva = ivaProductoResult.aplicaIva;
   const porcentajeOfertaVal = formData.get("porcentaje_oferta") as string;
   const porcentajeOferta = porcentajeOfertaVal ? parseInt(porcentajeOfertaVal, 10) : null;
   const insert: Record<string, unknown> = {
@@ -130,6 +225,7 @@ export async function crearProducto(formData: FormData) {
     descripcion: desc ? sanitizarTexto(desc, MAX_DESCRIPCION) : null,
     precio,
     aplica_iva: aplicaIva,
+    iva_porcentaje: ivaProductoResult.ivaPorcentaje,
     imagen,
     subcategoria_id,
     porcentaje_oferta: porcentajeOferta != null && porcentajeOferta >= 1 && porcentajeOferta <= 99 ? porcentajeOferta : null,
@@ -157,47 +253,29 @@ export async function crearProducto(formData: FormData) {
   const productoId = inserted?.id;
   if (!productoId) return { error: "No se pudo crear el producto" };
 
-  // Crear presentaciones (si no hay ninguna, crear "Principal" para que aparezca en inventario)
-  let orden = 0;
-  for (let i = 0; i < 50; i++) {
-    const nombrePres = (formData.get(`presentacion_${i}_nombre`) as string | null)?.trim();
-    if (nombrePres === undefined || nombrePres === null) break;
-    if (!nombrePres) continue;
-    const errPresNombre = validarLongitud(nombrePres, MAX_PRESENTACION_NOMBRE);
-    if (errPresNombre) return { error: `Presentación ${i + 1}: ${errPresNombre}` };
-    const precioVal = formData.get(`presentacion_${i}_precio`) as string;
-    const precioPres = precioVal ? parseFloat(precioVal) : null;
-    if (precioPres != null && (precioPres < 0 || precioPres > MAX_PRECIO)) return { error: `Presentación "${nombrePres}": precio inválido` };
-    const file = formData.get(`presentacion_${i}_imagen`) as File | null;
-    let imagen: string | null = null;
-    if (file?.size) {
-      const res = await subirImagen(file);
-      if ("error" in res) return { error: `Presentación ${i + 1} imagen: ${res.error}` };
-      if ("url" in res && res.url) imagen = res.url;
-    }
-    const aplicaIvaPres = formData.get(`presentacion_${i}_aplica_iva`) === "1";
-    const ofertaPresVal = formData.get(`presentacion_${i}_oferta`) as string;
-    const porcentajeOfertaPres = ofertaPresVal ? parseInt(ofertaPresVal, 10) : null;
-    const { error: errPres } = await supabase.from("producto_presentaciones").insert({
-      producto_id: productoId,
-      nombre: sanitizarTexto(nombrePres, MAX_PRESENTACION_NOMBRE),
-      imagen,
-      precio: precioPres,
-      aplica_iva: aplicaIvaPres,
-      porcentaje_oferta: porcentajeOfertaPres != null && porcentajeOfertaPres >= 1 && porcentajeOfertaPres <= 99 ? porcentajeOfertaPres : null,
-      orden: orden++,
-    });
-    if (errPres) return { error: `Error al crear presentación "${nombrePres}": ${errPres.message}` };
-  }
-
-  // Si no se creó ninguna presentación, crear "Principal" para que el producto aparezca en inventario
-  if (orden === 0) {
+  // Crear presentaciones; si no hay ninguna, crear "Principal" para inventario.
+  if (presentacionesResult.presentaciones.length > 0) {
+    const { error: errPres } = await supabase.from("producto_presentaciones").insert(
+      presentacionesResult.presentaciones.map((presentacion) => ({
+        producto_id: productoId,
+        nombre: presentacion.nombre,
+        imagen: presentacion.imagen,
+        precio: presentacion.precio,
+        aplica_iva: presentacion.aplica_iva,
+        iva_porcentaje: presentacion.iva_porcentaje,
+        porcentaje_oferta: presentacion.porcentaje_oferta,
+        orden: presentacion.orden,
+      }))
+    );
+    if (errPres) return { error: `Error al crear presentaciones: ${errPres.message}` };
+  } else {
     const { error: errPrincipal } = await supabase.from("producto_presentaciones").insert({
       producto_id: productoId,
       nombre: "Principal",
       imagen: null,
       precio,
       aplica_iva: aplicaIva,
+      iva_porcentaje: ivaProductoResult.ivaPorcentaje,
       porcentaje_oferta: porcentajeOferta != null && porcentajeOferta >= 1 && porcentajeOferta <= 99 ? porcentajeOferta : null,
       orden: 0,
     });
@@ -233,6 +311,9 @@ export async function actualizarProducto(id: string, formData: FormData) {
   const dimUpdate = (formData.get("dimensiones") as string) || "";
   if (dimUpdate && dimUpdate.length > 100) return { error: "Dimensiones: máximo 100 caracteres" };
 
+  const presentacionesResult = await extraerPresentacionesDesdeFormData(formData);
+  if ("error" in presentacionesResult) return presentacionesResult;
+
   const supabase = await createClient();
   const file = formData.get("imagen") as File | null;
   let imagen: string | undefined;
@@ -242,7 +323,9 @@ export async function actualizarProducto(id: string, formData: FormData) {
     if ("url" in res && res.url) imagen = res.url;
   }
 
-  const aplicaIva = formData.get("aplica_iva") === "1";
+  const ivaProductoResult = parseIvaPorcentaje(formData.get("iva_porcentaje"), "IVA");
+  if ("error" in ivaProductoResult) return ivaProductoResult;
+  const aplicaIva = ivaProductoResult.aplicaIva;
   const porcentajeOfertaVal = formData.get("porcentaje_oferta") as string;
   const porcentajeOferta = porcentajeOfertaVal ? parseInt(porcentajeOfertaVal, 10) : null;
   const update: Record<string, unknown> = {
@@ -250,6 +333,7 @@ export async function actualizarProducto(id: string, formData: FormData) {
     descripcion: descUpdate ? sanitizarTexto(descUpdate, MAX_DESCRIPCION) : null,
     precio,
     aplica_iva: aplicaIva,
+    iva_porcentaje: ivaProductoResult.ivaPorcentaje,
     porcentaje_oferta: porcentajeOferta != null && porcentajeOferta >= 1 && porcentajeOferta <= 99 ? porcentajeOferta : null,
     subcategoria_id,
     peso: formData.get("peso") ? parseFloat(formData.get("peso") as string) : null,
@@ -271,57 +355,116 @@ export async function actualizarProducto(id: string, formData: FormData) {
 
   if (error) return { error: error.message };
 
-  // Actualizar presentaciones: eliminar existentes e insertar las nuevas
-  const { error: errDel } = await supabase.from("producto_presentaciones").delete().eq("producto_id", id);
-  if (errDel) return { error: `Error al actualizar presentaciones: ${errDel.message}` };
-
-  let orden = 0;
-  for (let i = 0; i < 50; i++) {
-    const nombrePres = (formData.get(`presentacion_${i}_nombre`) as string | null)?.trim();
-    if (nombrePres === undefined || nombrePres === null) break;
-    if (!nombrePres) continue;
-    const errPresNombre = validarLongitud(nombrePres, MAX_PRESENTACION_NOMBRE);
-    if (errPresNombre) return { error: `Presentación ${i + 1}: ${errPresNombre}` };
-    const precioVal = formData.get(`presentacion_${i}_precio`) as string;
-    const precioPres = precioVal ? parseFloat(precioVal) : null;
-    if (precioPres != null && (precioPres < 0 || precioPres > MAX_PRECIO)) return { error: `Presentación "${nombrePres}": precio inválido` };
-    const file = formData.get(`presentacion_${i}_imagen`) as File | null;
-    let imagen: string | null = null;
-    if (file?.size) {
-      const res = await subirImagen(file);
-      if ("error" in res) return { error: `Presentación ${i + 1} imagen: ${res.error}` };
-      if ("url" in res && res.url) imagen = res.url;
-    } else {
-      const urlExistente = formData.get(`presentacion_${i}_imagen_url`) as string;
-      if (urlExistente) imagen = urlExistente;
-    }
-    const aplicaIvaPres = formData.get(`presentacion_${i}_aplica_iva`) === "1";
-    const ofertaPresVal = formData.get(`presentacion_${i}_oferta`) as string;
-    const porcentajeOfertaPres = ofertaPresVal ? parseInt(ofertaPresVal, 10) : null;
-    const { error: errPres } = await supabase.from("producto_presentaciones").insert({
-      producto_id: id,
-      nombre: sanitizarTexto(nombrePres, MAX_PRESENTACION_NOMBRE),
-      imagen,
-      precio: precioPres,
-      aplica_iva: aplicaIvaPres,
-      porcentaje_oferta: porcentajeOfertaPres != null && porcentajeOfertaPres >= 1 && porcentajeOfertaPres <= 99 ? porcentajeOfertaPres : null,
-      orden: orden++,
-    });
-    if (errPres) return { error: `Error al crear presentación "${nombrePres}": ${errPres.message}` };
+  const { data: presentacionesExistentes, error: errPresentacionesExistentes } = await supabase
+    .from("producto_presentaciones")
+    .select("id")
+    .eq("producto_id", id);
+  if (errPresentacionesExistentes) {
+    return { error: `Error al consultar presentaciones actuales: ${errPresentacionesExistentes.message}` };
   }
 
-  // Si no quedó ninguna presentación, crear "Principal" para que aparezca en inventario
-  if (orden === 0) {
-    const { error: errPrincipal } = await supabase.from("producto_presentaciones").insert({
-      producto_id: id,
-      nombre: "Principal",
-      imagen: null,
-      precio,
-      aplica_iva: aplicaIva,
-      porcentaje_oferta: porcentajeOferta != null && porcentajeOferta >= 1 && porcentajeOferta <= 99 ? porcentajeOferta : null,
-      orden: 0,
-    });
-    if (errPrincipal) return { error: `Error al crear presentación Principal: ${errPrincipal.message}` };
+  const idsExistentes = new Set((presentacionesExistentes ?? []).map((p) => p.id));
+  const idsConservados = new Set<string>();
+
+  if (presentacionesResult.presentaciones.length === 0) {
+    const { data: principalExistente } = await supabase
+      .from("producto_presentaciones")
+      .select("id")
+      .eq("producto_id", id)
+      .eq("nombre", "Principal")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (principalExistente?.id) {
+      const { error: errPrincipalUpdate } = await supabase
+        .from("producto_presentaciones")
+        .update({
+          nombre: "Principal",
+          imagen: null,
+          precio,
+          aplica_iva: aplicaIva,
+          iva_porcentaje: ivaProductoResult.ivaPorcentaje,
+          porcentaje_oferta:
+            porcentajeOferta != null && porcentajeOferta >= 1 && porcentajeOferta <= 99
+              ? porcentajeOferta
+              : null,
+          orden: 0,
+        })
+        .eq("id", principalExistente.id)
+        .eq("producto_id", id);
+      if (errPrincipalUpdate) {
+        return { error: `Error al actualizar presentación Principal: ${errPrincipalUpdate.message}` };
+      }
+      idsConservados.add(principalExistente.id);
+    } else {
+      const { data: principalInsertada, error: errPrincipal } = await supabase
+        .from("producto_presentaciones")
+        .insert({
+          producto_id: id,
+          nombre: "Principal",
+          imagen: null,
+          precio,
+          aplica_iva: aplicaIva,
+          iva_porcentaje: ivaProductoResult.ivaPorcentaje,
+          porcentaje_oferta:
+            porcentajeOferta != null && porcentajeOferta >= 1 && porcentajeOferta <= 99
+              ? porcentajeOferta
+              : null,
+          orden: 0,
+        })
+        .select("id")
+        .single();
+      if (errPrincipal) return { error: `Error al crear presentación Principal: ${errPrincipal.message}` };
+      if (principalInsertada?.id) idsConservados.add(principalInsertada.id);
+    }
+  } else {
+    for (const presentacion of presentacionesResult.presentaciones) {
+      if (presentacion.id && idsExistentes.has(presentacion.id)) {
+        const { error: errPresUpdate } = await supabase
+          .from("producto_presentaciones")
+          .update({
+            nombre: presentacion.nombre,
+            imagen: presentacion.imagen,
+            precio: presentacion.precio,
+            aplica_iva: presentacion.aplica_iva,
+            iva_porcentaje: presentacion.iva_porcentaje,
+            porcentaje_oferta: presentacion.porcentaje_oferta,
+            orden: presentacion.orden,
+          })
+          .eq("id", presentacion.id)
+          .eq("producto_id", id);
+        if (errPresUpdate) {
+          return { error: `Error al actualizar presentación "${presentacion.nombre}": ${errPresUpdate.message}` };
+        }
+        idsConservados.add(presentacion.id);
+      } else {
+        const { data: presentacionInsertada, error: errPresInsert } = await supabase
+          .from("producto_presentaciones")
+          .insert({
+            producto_id: id,
+            nombre: presentacion.nombre,
+            imagen: presentacion.imagen,
+            precio: presentacion.precio,
+            aplica_iva: presentacion.aplica_iva,
+            iva_porcentaje: presentacion.iva_porcentaje,
+            porcentaje_oferta: presentacion.porcentaje_oferta,
+            orden: presentacion.orden,
+          })
+          .select("id")
+          .single();
+        if (errPresInsert) {
+          return { error: `Error al crear presentación "${presentacion.nombre}": ${errPresInsert.message}` };
+        }
+        if (presentacionInsertada?.id) idsConservados.add(presentacionInsertada.id);
+      }
+    }
+  }
+
+  const idsAEliminar = [...idsExistentes].filter((presentacionId) => !idsConservados.has(presentacionId));
+  if (idsAEliminar.length > 0) {
+    const { error: errDel } = await supabase.from("producto_presentaciones").delete().in("id", idsAEliminar);
+    if (errDel) return { error: `Error al eliminar presentaciones removidas: ${errDel.message}` };
   }
 
   revalidatePath("/dashboard/productos");

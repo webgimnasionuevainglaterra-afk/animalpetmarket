@@ -130,6 +130,7 @@ export function ProductosClient({
                     descripcion: prod.descripcion,
                     precio: typeof prod.precio === "string" ? parseFloat(prod.precio) : Number(prod.precio),
                     aplica_iva: (prod as { aplica_iva?: boolean }).aplica_iva !== false,
+                    iva_porcentaje: (prod as { iva_porcentaje?: number | null }).iva_porcentaje ?? ((prod as { aplica_iva?: boolean }).aplica_iva === false ? 0 : 19),
                     imagen: prod.imagen,
                     subcategoria_id: prod.subcategoria_id,
                     peso: prod.peso ? Number(prod.peso) : null,

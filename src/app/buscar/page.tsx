@@ -1,5 +1,6 @@
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { aplicarIva, resolverIvaPorcentaje } from "@/lib/iva";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 
@@ -36,7 +37,7 @@ export default async function BuscarPage({
   const term = `%${query}%`;
   const { data: productos } = await supabase
     .from("productos")
-    .select("id, nombre, precio, imagen, aplica_iva, porcentaje_oferta, producto_presentaciones (precio, porcentaje_oferta, orden, aplica_iva)")
+    .select("id, nombre, precio, imagen, aplica_iva, iva_porcentaje, porcentaje_oferta, producto_presentaciones (precio, porcentaje_oferta, orden, aplica_iva, iva_porcentaje)")
     .or(`nombre.ilike.${term},descripcion.ilike.${term}`)
     .order("nombre");
 
@@ -70,7 +71,15 @@ export default async function BuscarPage({
                   const pres = ordenados[0];
                   const precio = pres?.precio != null ? Number(pres.precio) : Number(p.precio);
                   const oferta = pres?.porcentaje_oferta ?? p.porcentaje_oferta;
-                  const precioFinal = oferta && oferta > 0 ? precio * (1 - oferta / 100) : precio;
+                  const precioBase = oferta && oferta > 0 ? precio * (1 - oferta / 100) : precio;
+                  const ivaPorcentaje = resolverIvaPorcentaje({
+                    ivaPorcentaje: pres?.iva_porcentaje,
+                    aplicaIva: pres?.aplica_iva,
+                    fallbackPorcentaje: p.iva_porcentaje,
+                    fallbackAplicaIva: p.aplica_iva,
+                  });
+                  const precioFinal = aplicarIva(precioBase, ivaPorcentaje);
+                  const precioOriginal = aplicarIva(precio, ivaPorcentaje);
                   const href = `/producto/${p.id}`;
                   return (
                     <Link
@@ -96,7 +105,7 @@ export default async function BuscarPage({
                           ${precioFinal.toLocaleString("es-CO")}
                           {oferta && oferta > 0 && (
                             <span className="ml-1 text-xs font-normal text-slate-400 line-through">
-                              ${precio.toLocaleString("es-CO")}
+                              ${precioOriginal.toLocaleString("es-CO")}
                             </span>
                           )}
                         </p>

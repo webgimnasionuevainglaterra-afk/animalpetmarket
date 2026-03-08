@@ -1,12 +1,11 @@
 "use client";
 
 import { useCart } from "@/context/CartContext";
+import { aplicarIva, etiquetaIva, tieneIva } from "@/lib/iva";
 import { ShoppingCart } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ProductoGaleria } from "./ProductoGaleria";
-
-const IVA_PORCENTAJE = 19;
 
 type Presentacion = {
   id: string;
@@ -15,7 +14,7 @@ type Presentacion = {
   precio: number | null;
   orden: number;
   porcentaje_oferta?: number | null;
-  aplica_iva?: boolean;
+  iva_porcentaje?: number | null;
 };
 
 type Opcion = {
@@ -24,14 +23,14 @@ type Opcion = {
   precioOriginal: number;
   porcentajeOferta: number;
   imagenIndex: number;
-  aplicaIva?: boolean;
+  ivaPorcentaje: number;
 };
 
 export function ProductoDetalle({
   productId,
   nombre,
   precioBase,
-  aplicaIvaBase = true,
+  ivaPorcentajeBase = 19,
   descripcion,
   imagenes,
   presentaciones,
@@ -49,7 +48,7 @@ export function ProductoDetalle({
   descripcion: string | null;
   imagenes: { url: string; label?: string }[];
   presentaciones: Presentacion[];
-  aplicaIvaBase?: boolean;
+  ivaPorcentajeBase?: number;
   badge: string | null;
   porcentajeOfertaBase?: number | null;
   datosMedicamento: Record<string, string> | null;
@@ -65,24 +64,24 @@ export function ProductoDetalle({
 
   const ofertaPrincipal = porcentajeOfertaBase ?? 0;
   const precioPrincipalBase = ofertaPrincipal > 0 ? precioBase * (1 - ofertaPrincipal / 100) : precioBase;
-  const precioPrincipalFinal = aplicaIvaBase ? precioPrincipalBase * (1 + IVA_PORCENTAJE / 100) : precioPrincipalBase;
+  const precioPrincipalFinal = aplicarIva(precioPrincipalBase, ivaPorcentajeBase);
   const opciones: Opcion[] = [{
     nombre: "Principal",
     precio: precioPrincipalFinal,
     precioOriginal: precioPrincipalBase,
     porcentajeOferta: ofertaPrincipal,
     imagenIndex: 0,
-    aplicaIva: aplicaIvaBase,
+    ivaPorcentaje: ivaPorcentajeBase,
   }];
   let imgIdx = 1;
   for (const p of sortedPresentaciones) {
     const precioOrig = p.precio != null ? Number(p.precio) : precioBase;
     const oferta = p.porcentaje_oferta ?? 0;
     const precioBasePres = oferta > 0 ? precioOrig * (1 - oferta / 100) : precioOrig;
-    const aplicaIva = p.aplica_iva ?? aplicaIvaBase;
-    const precioFinal = aplicaIva ? precioBasePres * (1 + IVA_PORCENTAJE / 100) : precioBasePres;
+    const ivaPorcentaje = p.iva_porcentaje ?? ivaPorcentajeBase;
+    const precioFinal = aplicarIva(precioBasePres, ivaPorcentaje);
     const imagenIndex = p.imagen ? imgIdx++ : 0;
-    opciones.push({ nombre: p.nombre, precio: precioFinal, precioOriginal: precioBasePres, porcentajeOferta: oferta, imagenIndex, aplicaIva });
+    opciones.push({ nombre: p.nombre, precio: precioFinal, precioOriginal: precioBasePres, porcentajeOferta: oferta, imagenIndex, ivaPorcentaje });
   }
 
   const [seleccionada, setSeleccionada] = useState(0);
@@ -131,8 +130,8 @@ export function ProductoDetalle({
               <span className="text-3xl font-black text-[var(--ca-orange)]">
                 ${precioActual.toLocaleString("es-CO")}
               </span>
-              {opcion.aplicaIva && (
-                <span className="text-xs text-slate-500">(IVA incl.)</span>
+              {tieneIva(opcion.ivaPorcentaje) && (
+                <span className="text-xs text-slate-500">({etiquetaIva(opcion.ivaPorcentaje)})</span>
               )}
               <span className="rounded-full bg-[#ff6b35] px-2 py-0.5 text-xs font-bold text-white">
                 {opcion.porcentajeOferta}% OFF
@@ -143,8 +142,8 @@ export function ProductoDetalle({
               <span className="text-3xl font-black text-[var(--ca-orange)]">
                 ${precioActual.toLocaleString("es-CO")}
               </span>
-              {opcion?.aplicaIva && (
-                <span className="text-xs text-slate-500">(IVA incl.)</span>
+              {tieneIva(opcion?.ivaPorcentaje) && (
+                <span className="text-xs text-slate-500">({etiquetaIva(opcion?.ivaPorcentaje)})</span>
               )}
             </span>
           )}

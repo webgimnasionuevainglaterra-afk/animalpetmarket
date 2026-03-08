@@ -2,10 +2,11 @@ import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import TopBar from "@/components/TopBar";
 import { ProductoDetalle } from "@/components/ProductoDetalle";
+import { resolverIvaPorcentaje } from "@/lib/iva";
 import { createClient } from "@/lib/supabase/server";
 import { isValidUUID } from "@/lib/validations";
 import { WhatsAppFloatingButton } from "@/components/WhatsAppFloatingButton";
-import { ArrowLeft, MessageCircle, Truck } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -30,6 +31,7 @@ export default async function ProductoPage({
       descripcion,
       precio,
       aplica_iva,
+      iva_porcentaje,
       imagen,
       porcentaje_oferta,
       peso,
@@ -53,7 +55,7 @@ export default async function ProductoPage({
 
   const { data: presentaciones } = await supabase
     .from("producto_presentaciones")
-    .select("id, nombre, imagen, precio, orden, porcentaje_oferta, aplica_iva")
+    .select("id, nombre, imagen, precio, orden, porcentaje_oferta, aplica_iva, iva_porcentaje")
     .eq("producto_id", id)
     .order("orden");
 
@@ -118,12 +120,20 @@ export default async function ProductoPage({
                 productId={producto.id}
                 nombre={producto.nombre}
                 precioBase={precioNum}
-                aplicaIvaBase={(producto as { aplica_iva?: boolean }).aplica_iva !== false}
+                ivaPorcentajeBase={resolverIvaPorcentaje({
+                  ivaPorcentaje: (producto as { iva_porcentaje?: number | null }).iva_porcentaje,
+                  aplicaIva: (producto as { aplica_iva?: boolean }).aplica_iva,
+                })}
                 descripcion={producto.descripcion}
                 imagenes={imagenes}
                 presentaciones={(presentaciones ?? []).map((p) => ({
                   ...p,
-                  aplica_iva: p.aplica_iva != null ? !!p.aplica_iva : undefined,
+                  iva_porcentaje: resolverIvaPorcentaje({
+                    ivaPorcentaje: p.iva_porcentaje,
+                    aplicaIva: p.aplica_iva,
+                    fallbackPorcentaje: (producto as { iva_porcentaje?: number | null }).iva_porcentaje,
+                    fallbackAplicaIva: (producto as { aplica_iva?: boolean }).aplica_iva,
+                  }),
                 }))}
                 badge={badge}
                 porcentajeOfertaBase={producto.porcentaje_oferta != null ? Number(producto.porcentaje_oferta) : null}

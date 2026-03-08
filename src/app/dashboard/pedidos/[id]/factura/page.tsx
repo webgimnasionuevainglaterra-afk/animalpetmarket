@@ -23,7 +23,7 @@ export default async function FacturaPage({
       total,
       estado,
       created_at,
-      pedido_items (nombre, presentacion, cantidad, precio_unitario, subtotal, aplica_iva)
+      pedido_items (nombre, presentacion, cantidad, precio_unitario, subtotal, aplica_iva, iva_porcentaje)
     `
     )
     .eq("id", id)

@@ -24,7 +24,8 @@ export default async function CrearPedidoPage() {
       id,
       nombre,
       aplica_iva,
-      producto_presentaciones (id, nombre, precio, aplica_iva)
+      iva_porcentaje,
+      producto_presentaciones (id, nombre, precio, aplica_iva, iva_porcentaje)
     `)
     .order("nombre");
 
@@ -35,7 +36,8 @@ export default async function CrearPedidoPage() {
         id: string;
         nombre: string;
         aplica_iva: boolean;
-        producto_presentaciones: Array<{ id: string; nombre: string; precio: number; aplica_iva: boolean }>;
+        iva_porcentaje?: number | null;
+        producto_presentaciones: Array<{ id: string; nombre: string; precio: number; aplica_iva: boolean; iva_porcentaje?: number | null }>;
       }>}
     />
   );
