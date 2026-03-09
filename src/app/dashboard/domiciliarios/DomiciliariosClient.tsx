@@ -1,7 +1,7 @@
 "use client";
 
-import { actualizarDomiciliario, crearDomiciliario } from "./actions";
-import { Bike, Download, Plus, Pencil, X } from "lucide-react";
+import { actualizarDomiciliario, crearDomiciliario, eliminarDomiciliario } from "./actions";
+import { Bike, Download, Plus, Pencil, Trash2, X } from "lucide-react";
 import { useState } from "react";
 
 type Domiciliario = {
@@ -56,6 +56,24 @@ export function DomiciliariosClient({ domiciliarios }: { domiciliarios: Domicili
       setError(result.error);
     } else {
       setEditando(null);
+      window.location.reload();
+    }
+  }
+
+  async function handleEliminar(domiciliario: Domiciliario) {
+    if (!confirm(`¿Eliminar al domiciliario "${domiciliario.nombre}"? También se eliminará su acceso al dashboard.`)) {
+      return;
+    }
+
+    setError(null);
+    setLoading(true);
+    const result = await eliminarDomiciliario(domiciliario.id);
+    setLoading(false);
+
+    if ("error" in result && result.error) {
+      setError(result.error);
+    } else {
+      if (editando?.id === domiciliario.id) setEditando(null);
       window.location.reload();
     }
   }
@@ -140,7 +158,7 @@ export function DomiciliariosClient({ domiciliarios }: { domiciliarios: Domicili
                 <th className="px-4 py-3 text-sm font-bold text-slate-600">Placa</th>
                 <th className="px-4 py-3 text-sm font-bold text-slate-600">Teléfono</th>
                 <th className="px-4 py-3 text-sm font-bold text-slate-600">Estado</th>
-                <th className="px-4 py-3 text-sm font-bold text-slate-600 w-24">Acciones</th>
+                <th className="px-4 py-3 text-sm font-bold text-slate-600 w-28">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -159,13 +177,23 @@ export function DomiciliariosClient({ domiciliarios }: { domiciliarios: Domicili
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => setEditando(d)}
-                      className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-[var(--ca-purple)]"
-                      title="Editar"
-                    >
-                      <Pencil size={18} />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setEditando(d)}
+                        className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-[var(--ca-purple)]"
+                        title="Editar"
+                      >
+                        <Pencil size={18} />
+                      </button>
+                      <button
+                        onClick={() => handleEliminar(d)}
+                        disabled={loading}
+                        className="rounded-lg p-2 text-slate-500 hover:bg-red-100 hover:text-red-600 disabled:opacity-50"
+                        title="Eliminar"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

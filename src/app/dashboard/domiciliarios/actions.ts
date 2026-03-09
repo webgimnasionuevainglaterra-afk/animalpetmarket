@@ -1,5 +1,6 @@
 "use server";
 
+import { isValidUUID } from "@/lib/validations";
 import { createAdminClient, requireAuth } from "@/lib/supabase/server";
 import { getPerfil } from "@/lib/roles";
 import { revalidatePath } from "next/cache";
@@ -105,5 +106,48 @@ export async function actualizarDomiciliario(
   if (error) return { error: error.message };
 
   revalidatePath("/dashboard/domiciliarios");
+  return { success: true };
+}
+
+export async function eliminarDomiciliario(id: string) {
+  const auth = await requireAuth();
+  if (auth.error) return auth;
+
+  const perfil = await getPerfil(auth.user!.id);
+  if (perfil?.rol !== "admin") return { error: "No autorizado" };
+  if (!isValidUUID(id)) return { error: "Domiciliario inválido" };
+
+  const supabase = createAdminClient();
+
+  const { data: domiciliario, error: domError } = await supabase
+    .from("domiciliarios")
+    .select("id, user_id, nombre")
+    .eq("id", id)
+    .single();
+  if (domError || !domiciliario) {
+    return { error: domError?.message ?? "No se encontró el domiciliario" };
+  }
+
+  const { error: perfilesError } = await supabase
+    .from("perfiles")
+    .delete()
+    .eq("user_id", domiciliario.user_id);
+  if (perfilesError) return { error: perfilesError.message };
+
+  const { error: deleteError } = await supabase
+    .from("domiciliarios")
+    .delete()
+    .eq("id", id);
+  if (deleteError) return { error: deleteError.message };
+
+  const { error: authDeleteError } = await supabase.auth.admin.deleteUser(domiciliario.user_id);
+  if (authDeleteError) {
+    return {
+      error: `Se eliminó el domiciliario, pero no se pudo borrar su usuario de acceso: ${authDeleteError.message}`,
+    };
+  }
+
+  revalidatePath("/dashboard/domiciliarios");
+  revalidatePath("/dashboard/pedidos");
   return { success: true };
 }
