@@ -71,6 +71,13 @@ export async function rechazarPedido(pedidoId: string) {
 
   const supabase = createAdminClient();
 
+  // Si el pedido usó cupón, primero hay que liberarlo para no violar la FK.
+  const { error: errCupon } = await supabase
+    .from("cupones")
+    .update({ usado: false, pedido_id: null })
+    .eq("pedido_id", pedidoId);
+  if (errCupon) return { error: errCupon.message };
+
   const { data: pedido } = await supabase
     .from("pedidos")
     .select("estado")
