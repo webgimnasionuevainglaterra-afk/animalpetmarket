@@ -1,5 +1,6 @@
 "use server";
 
+import { isValidUUID } from "@/lib/validations";
 import { createAdminClient, requireAuth } from "@/lib/supabase/server";
 import { getPerfil } from "@/lib/roles";
 import { revalidatePath } from "next/cache";
@@ -94,5 +95,50 @@ export async function actualizarVendedor(
   if (error) return { error: error.message };
 
   revalidatePath("/dashboard/vendedores");
+  return { success: true };
+}
+
+export async function eliminarVendedor(id: string) {
+  const auth = await requireAuth();
+  if (auth.error) return auth;
+
+  const perfil = await getPerfil(auth.user!.id);
+  if (perfil?.rol !== "admin") return { error: "No autorizado" };
+  if (!isValidUUID(id)) return { error: "Vendedor inválido" };
+
+  const supabase = createAdminClient();
+
+  const { data: vendedor, error: vendedorError } = await supabase
+    .from("vendedores")
+    .select("id, user_id, nombre")
+    .eq("id", id)
+    .single();
+  if (vendedorError || !vendedor) {
+    return { error: vendedorError?.message ?? "No se encontró el vendedor" };
+  }
+
+  // Limpiar referencias explícitas antes del borrado para evitar datos colgando
+  const { error: perfilesError } = await supabase
+    .from("perfiles")
+    .delete()
+    .eq("user_id", vendedor.user_id);
+  if (perfilesError) return { error: perfilesError.message };
+
+  const { error: deleteError } = await supabase
+    .from("vendedores")
+    .delete()
+    .eq("id", id);
+  if (deleteError) return { error: deleteError.message };
+
+  const { error: authDeleteError } = await supabase.auth.admin.deleteUser(vendedor.user_id);
+  if (authDeleteError) {
+    return {
+      error: `Se eliminó el vendedor, pero no se pudo borrar su usuario de acceso: ${authDeleteError.message}`,
+    };
+  }
+
+  revalidatePath("/dashboard/vendedores");
+  revalidatePath("/dashboard/pedidos");
+  revalidatePath("/dashboard/clientes");
   return { success: true };
 }

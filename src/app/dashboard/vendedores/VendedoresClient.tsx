@@ -1,7 +1,7 @@
 "use client";
 
-import { actualizarVendedor, crearVendedor } from "./actions";
-import { Download, Plus, Pencil, Users, X } from "lucide-react";
+import { actualizarVendedor, crearVendedor, eliminarVendedor } from "./actions";
+import { Download, Plus, Pencil, Trash2, Users, X } from "lucide-react";
 import { useState } from "react";
 
 type Vendedor = {
@@ -56,6 +56,24 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
       setError(result.error);
     } else {
       setEditando(null);
+      window.location.reload();
+    }
+  }
+
+  async function handleEliminar(vendedor: Vendedor) {
+    if (!confirm(`¿Eliminar al vendedor "${vendedor.nombre}"? También se eliminará su acceso al dashboard.`)) {
+      return;
+    }
+
+    setError(null);
+    setLoading(true);
+    const result = await eliminarVendedor(vendedor.id);
+    setLoading(false);
+
+    if ("error" in result && result.error) {
+      setError(result.error);
+    } else {
+      if (editando?.id === vendedor.id) setEditando(null);
       window.location.reload();
     }
   }
@@ -140,7 +158,7 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
                 <th className="px-4 py-3 text-sm font-bold text-slate-600">Email</th>
                 <th className="px-4 py-3 text-sm font-bold text-slate-600 text-right">Comisión (%)</th>
                 <th className="px-4 py-3 text-sm font-bold text-slate-600">Estado</th>
-                <th className="px-4 py-3 text-sm font-bold text-slate-600 w-24">Acciones</th>
+                <th className="px-4 py-3 text-sm font-bold text-slate-600 w-28">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -161,13 +179,23 @@ export function VendedoresClient({ vendedores }: { vendedores: Vendedor[] }) {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      onClick={() => setEditando(v)}
-                      className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-[var(--ca-purple)]"
-                      title="Editar"
-                    >
-                      <Pencil size={18} />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => setEditando(v)}
+                        className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-[var(--ca-purple)]"
+                        title="Editar"
+                      >
+                        <Pencil size={18} />
+                      </button>
+                      <button
+                        onClick={() => handleEliminar(v)}
+                        disabled={loading}
+                        className="rounded-lg p-2 text-slate-500 hover:bg-red-100 hover:text-red-600 disabled:opacity-50"
+                        title="Eliminar"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
