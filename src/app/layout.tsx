@@ -3,9 +3,14 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Centro Animal | Tienda online para mascotas",
+  title: "AnimalPetMarket | Tienda online para mascotas",
   description:
-    "Centro Animal: tienda virtual de productos para mascotas con envíos rápidos y compras seguras.",
+    "AnimalPetMarket: tienda virtual de productos para mascotas con envíos rápidos y compras seguras.",
+  icons: {
+    icon: "/img/logo-centro-animal.ico",
+    shortcut: "/img/logo-centro-animal.ico",
+    apple: "/img/logo-centro-animal.ico",
+  },
 };
 
 export default function RootLayout({
