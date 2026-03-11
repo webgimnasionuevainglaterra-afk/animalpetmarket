@@ -21,16 +21,36 @@ type ProductoRow = Producto & {
     | { nombre: string; categorias?: { nombre: string } | { nombre: string }[] }
     | { nombre: string; categorias?: { nombre: string } | { nombre: string }[] }[]
     | null;
+  producto_subcategorias?:
+    | {
+        subcategoria_id?: string | null;
+        subcategorias?:
+          | { nombre: string; categorias?: { nombre: string } | { nombre: string }[] }
+          | { nombre: string; categorias?: { nombre: string } | { nombre: string }[] }[]
+          | null;
+      }[]
+    | null;
   producto_presentaciones?: ProductoPresentacion[] | null;
 };
 
 function getSubcatName(p: ProductoRow) {
-  const s = p.subcategorias;
-  if (!s) return "-";
-  const sub = Array.isArray(s) ? s[0] : s;
-  const cat = sub?.categorias;
-  const catObj = Array.isArray(cat) ? cat[0] : cat;
-  return catObj ? `${(catObj as { nombre: string }).nombre} → ${sub?.nombre}` : sub?.nombre ?? "-";
+  const items: string[] = [];
+  const principales = p.subcategorias ? (Array.isArray(p.subcategorias) ? p.subcategorias : [p.subcategorias]) : [];
+  const adicionales = Array.isArray(p.producto_subcategorias)
+    ? p.producto_subcategorias
+        .map((rel) => rel.subcategorias)
+        .flatMap((sub) => (sub ? (Array.isArray(sub) ? sub : [sub]) : []))
+    : [];
+
+  [...principales, ...adicionales].forEach((sub) => {
+    if (!sub?.nombre) return;
+    const cat = sub.categorias;
+    const catObj = Array.isArray(cat) ? cat[0] : cat;
+    const label = catObj ? `${catObj.nombre} → ${sub.nombre}` : sub.nombre;
+    if (!items.includes(label)) items.push(label);
+  });
+
+  return items.length > 0 ? items.join(", ") : "-";
 }
 
 export function ProductosClient({
@@ -133,6 +153,7 @@ export function ProductosClient({
                     iva_porcentaje: (prod as { iva_porcentaje?: number | null }).iva_porcentaje ?? ((prod as { aplica_iva?: boolean }).aplica_iva === false ? 0 : 19),
                     imagen: prod.imagen,
                     subcategoria_id: prod.subcategoria_id,
+                    subcategoria_ids: (prod as { subcategoria_ids?: string[] }).subcategoria_ids ?? [prod.subcategoria_id],
                     peso: prod.peso ? Number(prod.peso) : null,
                     dimensiones: prod.dimensiones,
                     requiere_refrigeracion: prod.requiere_refrigeracion,

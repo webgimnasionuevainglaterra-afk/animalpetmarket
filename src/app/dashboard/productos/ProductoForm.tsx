@@ -34,6 +34,7 @@ type ProductoFormProps = {
     iva_porcentaje?: number | null;
     imagen: string | null;
     subcategoria_id: string;
+    subcategoria_ids?: string[];
     peso: number | null;
     dimensiones: string | null;
     requiere_refrigeracion: boolean;
@@ -65,6 +66,12 @@ export function ProductoForm({
   loading,
   submitLabel,
 }: ProductoFormProps) {
+  const [subcategoriaPrincipalId, setSubcategoriaPrincipalId] = useState(
+    producto?.subcategoria_id ?? ""
+  );
+  const [subcategoriasSeleccionadas, setSubcategoriasSeleccionadas] = useState<string[]>(
+    producto?.subcategoria_ids ?? (producto?.subcategoria_id ? [producto.subcategoria_id] : [])
+  );
   const [secciones, setSecciones] = useState<SeccionId[]>(
     (producto?.secciones_activas ?? []).filter((s): s is SeccionId =>
       SECCIONES.some((sec) => sec.id === s)
@@ -102,11 +109,22 @@ export function ProductoForm({
     setPresentacionesList((prev) => prev.filter((_, idx) => idx !== i));
   };
 
+  const toggleSubcategoria = (id: string) => {
+    setSubcategoriasSeleccionadas((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    );
+  };
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     const form = e.currentTarget;
     const formData = new FormData(form);
+
+    formData.delete("subcategoria_ids");
+    subcategoriasSeleccionadas
+      .filter((id) => id !== subcategoriaPrincipalId)
+      .forEach((id) => formData.append("subcategoria_ids", id));
 
     secciones.forEach((s) => formData.append("secciones_activas", s));
 
@@ -246,7 +264,16 @@ export function ProductoForm({
           <select
             name="subcategoria_id"
             required
-            defaultValue={producto?.subcategoria_id}
+            value={subcategoriaPrincipalId}
+            onChange={(e) => {
+              const value = e.target.value;
+              setSubcategoriaPrincipalId(value);
+              if (value) {
+                setSubcategoriasSeleccionadas((prev) =>
+                  prev.includes(value) ? prev : [...prev, value]
+                );
+              }
+            }}
             className="h-10 w-full rounded-lg border border-slate-200 px-3"
           >
             <option value="">Selecciona subcategoría</option>
@@ -262,6 +289,53 @@ export function ProductoForm({
               </optgroup>
             ))}
           </select>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <p className="mb-2 text-sm font-semibold text-slate-700">
+            Otras subcategorías donde también aparece
+          </p>
+          <p className="mb-3 text-xs text-slate-500">
+            El producto conservará una subcategoría principal, pero también podrá mostrarse en otras sin duplicarlo.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {categorias.map((cat) => {
+              const relacionadas = subcategorias.filter((s) => s.categoria_id === cat.id);
+              if (relacionadas.length === 0) return null;
+              return (
+                <div key={cat.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                  <p className="mb-2 text-sm font-bold text-slate-700">{cat.nombre}</p>
+                  <div className="space-y-2">
+                    {relacionadas.map((sub) => {
+                      const esPrincipal = subcategoriaPrincipalId === sub.id;
+                      const checked = esPrincipal || subcategoriasSeleccionadas.includes(sub.id);
+                      return (
+                        <label key={sub.id} className="flex items-center gap-2 text-sm text-slate-600">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => {
+                              if (esPrincipal) return;
+                              toggleSubcategoria(sub.id);
+                            }}
+                            disabled={esPrincipal}
+                            className="rounded"
+                          />
+                          <span>
+                            {sub.nombre}
+                            {esPrincipal && (
+                              <span className="ml-1 text-xs font-semibold text-[var(--ca-purple)]">
+                                (principal)
+                              </span>
+                            )}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
         <div>
           <label className="mb-1 block text-sm font-semibold">Descripción</label>

@@ -30,6 +30,7 @@ export default async function ProductosPage() {
       datos_juguete,
       created_at,
       subcategorias (nombre, categorias (nombre)),
+      producto_subcategorias (subcategoria_id, subcategorias (nombre, categorias (nombre))),
       producto_presentaciones (id, nombre, imagen, precio, orden, aplica_iva, iva_porcentaje, porcentaje_oferta)
     `)
     .order("nombre");
@@ -76,10 +77,24 @@ export default async function ProductosPage() {
     });
   }
 
-  const productosConStock = (productos ?? []).map((p) => ({
-    ...p,
-    stock: stockPorProducto[p.id] ?? 0,
-  }));
+  const productosConStock = (productos ?? []).map((p) => {
+    const relacionadas = Array.isArray(p.producto_subcategorias)
+      ? p.producto_subcategorias
+      : p.producto_subcategorias
+        ? [p.producto_subcategorias]
+        : [];
+    const subcategoria_ids = [
+      p.subcategoria_id,
+      ...relacionadas
+        .map((rel: { subcategoria_id?: string | null }) => rel.subcategoria_id)
+        .filter((id): id is string => Boolean(id)),
+    ];
+    return {
+      ...p,
+      subcategoria_ids: [...new Set(subcategoria_ids)],
+      stock: stockPorProducto[p.id] ?? 0,
+    };
+  });
 
   return (
     <ProductosClient

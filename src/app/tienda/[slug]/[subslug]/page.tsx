@@ -47,11 +47,35 @@ export default async function TiendaSubcategoriaPage({
   const subcategoria = subcategorias?.find((s) => toSlug(s.nombre) === subslug);
   if (!subcategoria) notFound();
 
-  const { data: productos } = await supabase
+  const { data: productosPrincipales } = await supabase
     .from("productos")
     .select("id, nombre, precio, aplica_iva, iva_porcentaje, imagen, destacado, nuevo, mas_vendido, porcentaje_oferta, producto_presentaciones (precio, porcentaje_oferta, orden, aplica_iva, iva_porcentaje)")
     .eq("subcategoria_id", subcategoria.id)
     .order("nombre");
+
+  const { data: relaciones } = await supabase
+    .from("producto_subcategorias")
+    .select("producto_id")
+    .eq("subcategoria_id", subcategoria.id);
+
+  const idsExtra = (relaciones ?? [])
+    .map((rel) => rel.producto_id)
+    .filter((id): id is string => Boolean(id))
+    .filter((id) => !(productosPrincipales ?? []).some((producto) => producto.id === id));
+
+  let productosExtra: typeof productosPrincipales = [];
+  if (idsExtra.length > 0) {
+    const { data } = await supabase
+      .from("productos")
+      .select("id, nombre, precio, aplica_iva, iva_porcentaje, imagen, destacado, nuevo, mas_vendido, porcentaje_oferta, producto_presentaciones (precio, porcentaje_oferta, orden, aplica_iva, iva_porcentaje)")
+      .in("id", idsExtra)
+      .order("nombre");
+    productosExtra = data ?? [];
+  }
+
+  const productos = [...(productosPrincipales ?? []), ...(productosExtra ?? [])].sort((a, b) =>
+    a.nombre.localeCompare(b.nombre, "es")
+  );
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,#ffeef7,transparent_42%),#fff7ef] text-slate-800">

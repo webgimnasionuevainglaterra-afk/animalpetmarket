@@ -24,6 +24,7 @@ export type Producto = {
   precio: number | string;
   imagen: string | null;
   subcategoria_id: string;
+  subcategoria_ids?: string[];
   peso: number | null;
   dimensiones: string | null;
   requiere_refrigeracion: boolean;
@@ -102,6 +103,20 @@ function parseJson(formData: FormData, key: string): Record<string, unknown> | n
 function parseSecciones(formData: FormData): string[] {
   const secciones = formData.getAll("secciones_activas") as string[];
   return secciones.filter(Boolean);
+}
+
+function parseSubcategoriaIds(
+  formData: FormData,
+  subcategoriaPrincipalId: string
+): { ids: string[] } | { error: string } {
+  const idsCrudos = formData.getAll("subcategoria_ids").map((v) => String(v).trim());
+  const ids = [...new Set([subcategoriaPrincipalId, ...idsCrudos].filter(Boolean))];
+
+  for (const id of ids) {
+    if (!isValidUUID(id)) return { error: "Subcategoría adicional inválida" };
+  }
+
+  return { ids };
 }
 
 function parseIvaPorcentaje(
@@ -193,6 +208,8 @@ export async function crearProducto(formData: FormData) {
   const errPrecio = validarNumero(precio, 0, MAX_PRECIO, "El precio");
   if (errPrecio) return { error: errPrecio };
   if (!isValidUUID(subcategoria_id)) return { error: "Subcategoría inválida" };
+  const subcategoriasResult = parseSubcategoriaIds(formData, subcategoria_id);
+  if ("error" in subcategoriasResult) return subcategoriasResult;
 
   const desc = (formData.get("descripcion") as string) || "";
   if (desc) {
@@ -253,6 +270,16 @@ export async function crearProducto(formData: FormData) {
   const productoId = inserted?.id;
   if (!productoId) return { error: "No se pudo crear el producto" };
 
+  const { error: errRelaciones } = await supabase.from("producto_subcategorias").insert(
+    subcategoriasResult.ids.map((subcategoriaId) => ({
+      producto_id: productoId,
+      subcategoria_id: subcategoriaId,
+    }))
+  );
+  if (errRelaciones) {
+    return { error: `Error al guardar subcategorías del producto: ${errRelaciones.message}` };
+  }
+
   // Crear presentaciones; si no hay ninguna, crear "Principal" para inventario.
   if (presentacionesResult.presentaciones.length > 0) {
     const { error: errPres } = await supabase.from("producto_presentaciones").insert(
@@ -305,6 +332,8 @@ export async function actualizarProducto(id: string, formData: FormData) {
   const errPrecio = validarNumero(precio, 0, MAX_PRECIO, "El precio");
   if (errPrecio) return { error: errPrecio };
   if (!isValidUUID(subcategoria_id)) return { error: "Subcategoría inválida" };
+  const subcategoriasResult = parseSubcategoriaIds(formData, subcategoria_id);
+  if ("error" in subcategoriasResult) return subcategoriasResult;
 
   const descUpdate = (formData.get("descripcion") as string) || "";
   if (descUpdate && descUpdate.length > MAX_DESCRIPCION) return { error: "Descripción: máximo 2000 caracteres" };
@@ -354,6 +383,24 @@ export async function actualizarProducto(id: string, formData: FormData) {
   const { error } = await supabase.from("productos").update(update).eq("id", id);
 
   if (error) return { error: error.message };
+
+  const { error: errDeleteRelaciones } = await supabase
+    .from("producto_subcategorias")
+    .delete()
+    .eq("producto_id", id);
+  if (errDeleteRelaciones) {
+    return { error: `Error al actualizar subcategorías del producto: ${errDeleteRelaciones.message}` };
+  }
+
+  const { error: errInsertRelaciones } = await supabase.from("producto_subcategorias").insert(
+    subcategoriasResult.ids.map((subcategoriaId) => ({
+      producto_id: id,
+      subcategoria_id: subcategoriaId,
+    }))
+  );
+  if (errInsertRelaciones) {
+    return { error: `Error al guardar subcategorías del producto: ${errInsertRelaciones.message}` };
+  }
 
   const { data: presentacionesExistentes, error: errPresentacionesExistentes } = await supabase
     .from("producto_presentaciones")
