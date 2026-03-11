@@ -9,7 +9,6 @@ import {
 } from "./actions";
 import { ChevronLeft, ChevronRight, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { ProductoForm } from "./ProductoForm";
 
 type Subcategoria = { id: string; nombre: string; categoria_id: string };
@@ -63,7 +62,6 @@ export function ProductosClient({
   categorias: Categoria[];
   subcategorias: Subcategoria[];
 }) {
-  const router = useRouter();
   const formContainerRef = useRef<HTMLDivElement | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -76,13 +74,19 @@ export function ProductosClient({
     formContainerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [creating, editingId]);
 
+  function recargarPaginaProductos() {
+    if (typeof window !== "undefined") {
+      window.location.href = "/dashboard/productos";
+    }
+  }
+
   async function handleCreate(formData: FormData) {
     setLoading(true);
     try {
       const result = await crearProducto(formData);
       if ("success" in result && result.success) {
         setCreating(false);
-        router.refresh();
+        recargarPaginaProductos();
       }
       return result;
     } catch (error) {
@@ -103,7 +107,7 @@ export function ProductosClient({
       const result = await actualizarProducto(id, formData);
       if ("success" in result && result.success) {
         setEditingId(null);
-        router.refresh();
+        recargarPaginaProductos();
       }
       return result;
     } catch (error) {
@@ -123,7 +127,7 @@ export function ProductosClient({
     setLoading(true);
     try {
       await eliminarProducto(id);
-      router.refresh();
+      recargarPaginaProductos();
     } finally {
       setLoading(false);
     }
