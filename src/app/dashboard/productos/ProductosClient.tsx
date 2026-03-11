@@ -8,7 +8,7 @@ import {
   type ProductoPresentacion,
 } from "./actions";
 import { ChevronLeft, ChevronRight, Pencil, Plus, Search, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ProductoForm } from "./ProductoForm";
 
 type Subcategoria = { id: string; nombre: string; categoria_id: string };
@@ -62,11 +62,17 @@ export function ProductosClient({
   categorias: Categoria[];
   subcategorias: Subcategoria[];
 }) {
+  const formContainerRef = useRef<HTMLDivElement | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [loading, setLoading] = useState(false);
   const [busqueda, setBusqueda] = useState("");
   const [pagina, setPagina] = useState(1);
+
+  useEffect(() => {
+    if (!(creating || editingId)) return;
+    formContainerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [creating, editingId]);
 
   async function handleCreate(formData: FormData) {
     setLoading(true);
@@ -136,11 +142,15 @@ export function ProductosClient({
       </div>
 
       {(creating || editingId) && (
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-6">
+        <div
+          ref={formContainerRef}
+          className="rounded-xl border border-slate-200 bg-slate-50 p-6"
+        >
           <h2 className="mb-4 font-bold text-slate-700">
             {editingId ? "Editar producto" : "Nuevo producto"}
           </h2>
           <ProductoForm
+            key={editingId ?? (creating ? "nuevo-producto" : "producto-form")}
             categorias={categorias}
             subcategorias={subcategorias}
             producto={
@@ -259,7 +269,10 @@ export function ProductosClient({
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
-                      onClick={() => setEditingId(p.id)}
+                      onClick={() => {
+                        setCreating(false);
+                        setEditingId(p.id);
+                      }}
                       className="rounded-lg p-2 text-slate-500 hover:bg-slate-200 hover:text-[var(--ca-purple)]"
                       title="Editar"
                     >
