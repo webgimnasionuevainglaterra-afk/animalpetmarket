@@ -66,8 +66,10 @@ type PresentacionFormInput = {
   iva_porcentaje: number;
 };
 
-async function subirImagen(file: File): Promise<{ url: string } | { error: string }> {
-  if (!file?.size) return { url: "" };
+async function subirImagen(
+  file: File
+): Promise<{ url: string; path: string } | { error: string }> {
+  if (!file?.size) return { url: "", path: "" };
   if (file.size > MAX_IMAGEN_MB * 1024 * 1024) return { error: `La imagen no puede superar ${MAX_IMAGEN_MB} MB` };
   const tipos = ["image/jpeg", "image/png", "image/webp", "image/gif"];
   if (!tipos.includes(file.type)) return { error: "Formato de imagen no permitido (JPEG, PNG, WebP, GIF)" };
@@ -84,9 +86,35 @@ async function subirImagen(file: File): Promise<{ url: string } | { error: strin
     });
     if (error) return { error: error.message };
     const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
-    return { url: data.publicUrl };
+    return { url: data.publicUrl, path };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Error al subir imagen" };
+  }
+}
+
+async function eliminarImagenesSubidas(paths: string[]) {
+  const pathsValidos = [...new Set(paths.filter(Boolean))];
+  if (pathsValidos.length === 0) return;
+
+  try {
+    const supabase = createAdminClient();
+    await supabase.storage.from(BUCKET).remove(pathsValidos);
+  } catch {
+    // Si falla la limpieza de storage no bloqueamos la respuesta al usuario.
+  }
+}
+
+async function revertirCreacionProducto(productoId: string, uploadedImagePaths: string[]) {
+  try {
+    const supabase = createAdminClient();
+    const { error } = await supabase.from("productos").delete().eq("id", productoId);
+    if (error) {
+      return `Además no se pudo revertir el producto creado: ${error.message}`;
+    }
+    await eliminarImagenesSubidas(uploadedImagePaths);
+    return null;
+  } catch (e) {
+    return `Además no se pudo revertir el producto creado: ${e instanceof Error ? e.message : "error inesperado"}`;
   }
 }
 
@@ -133,8 +161,12 @@ function parseIvaPorcentaje(
 
 async function extraerPresentacionesDesdeFormData(
   formData: FormData
-): Promise<{ presentaciones: PresentacionFormInput[] } | { error: string }> {
+): Promise<
+  | { presentaciones: PresentacionFormInput[]; uploadedImagePaths: string[] }
+  | { error: string; uploadedImagePaths: string[] }
+> {
   const presentaciones: PresentacionFormInput[] = [];
+  const uploadedImagePaths: string[] = [];
 
   for (let i = 0; i < 50; i++) {
     const nombreRaw = formData.get(`presentacion_${i}_nombre`);
@@ -144,36 +176,44 @@ async function extraerPresentacionesDesdeFormData(
     if (!nombrePres) continue;
 
     const errPresNombre = validarLongitud(nombrePres, MAX_PRESENTACION_NOMBRE);
-    if (errPresNombre) return { error: `Presentación ${i + 1}: ${errPresNombre}` };
+    if (errPresNombre) {
+      return { error: `Presentación ${i + 1}: ${errPresNombre}`, uploadedImagePaths };
+    }
 
     const precioVal = formData.get(`presentacion_${i}_precio`) as string;
     const precioPres = precioVal ? parseFloat(precioVal) : null;
     if (precioPres != null && (precioPres < 0 || precioPres > MAX_PRECIO)) {
-      return { error: `Presentación "${nombrePres}": precio inválido` };
-    }
-
-    const file = formData.get(`presentacion_${i}_imagen`) as File | null;
-    let imagen: string | null = null;
-    if (file?.size) {
-      const res = await subirImagen(file);
-      if ("error" in res) return { error: `Presentación ${i + 1} imagen: ${res.error}` };
-      if ("url" in res && res.url) imagen = res.url;
-    } else {
-      const urlExistente = formData.get(`presentacion_${i}_imagen_url`) as string | null;
-      imagen = urlExistente?.trim() ? urlExistente : null;
+      return { error: `Presentación "${nombrePres}": precio inválido`, uploadedImagePaths };
     }
 
     const idRaw = formData.get(`presentacion_${i}_id`) as string | null;
     const id = idRaw?.trim() ? idRaw : undefined;
-    if (id && !isValidUUID(id)) return { error: `Presentación "${nombrePres}": ID inválido` };
+    if (id && !isValidUUID(id)) {
+      return { error: `Presentación "${nombrePres}": ID inválido`, uploadedImagePaths };
+    }
 
     const ivaPresResult = parseIvaPorcentaje(
       formData.get(`presentacion_${i}_iva_porcentaje`),
       `Presentación ${i + 1}`
     );
-    if ("error" in ivaPresResult) return ivaPresResult;
+    if ("error" in ivaPresResult) return { ...ivaPresResult, uploadedImagePaths };
+
     const ofertaPresVal = formData.get(`presentacion_${i}_oferta`) as string;
     const porcentajeOfertaPres = ofertaPresVal ? parseInt(ofertaPresVal, 10) : null;
+
+    const file = formData.get(`presentacion_${i}_imagen`) as File | null;
+    let imagen: string | null = null;
+    if (file?.size) {
+      const res = await subirImagen(file);
+      if ("error" in res) return { error: `Presentación ${i + 1} imagen: ${res.error}`, uploadedImagePaths };
+      if ("url" in res && res.url) {
+        imagen = res.url;
+        if (res.path) uploadedImagePaths.push(res.path);
+      }
+    } else {
+      const urlExistente = formData.get(`presentacion_${i}_imagen_url`) as string | null;
+      imagen = urlExistente?.trim() ? urlExistente : null;
+    }
 
     presentaciones.push({
       id,
@@ -190,7 +230,7 @@ async function extraerPresentacionesDesdeFormData(
     });
   }
 
-  return { presentaciones };
+  return { presentaciones, uploadedImagePaths };
 }
 
 export async function crearProducto(formData: FormData) {
@@ -220,16 +260,25 @@ export async function crearProducto(formData: FormData) {
   const dim = (formData.get("dimensiones") as string) || "";
   if (dim && dim.length > 100) return { error: "Dimensiones: máximo 100 caracteres" };
 
+  const uploadedImagePaths: string[] = [];
   const presentacionesResult = await extraerPresentacionesDesdeFormData(formData);
-  if ("error" in presentacionesResult) return presentacionesResult;
+  if ("error" in presentacionesResult) {
+    await eliminarImagenesSubidas(presentacionesResult.uploadedImagePaths);
+    return { error: presentacionesResult.error };
+  }
+  uploadedImagePaths.push(...presentacionesResult.uploadedImagePaths);
 
   const supabase = await createClient();
   const file = formData.get("imagen") as File | null;
   let imagen: string | null = null;
   if (file?.size) {
     const res = await subirImagen(file);
-    if ("error" in res) return { error: `Imagen: ${res.error}` };
+    if ("error" in res) {
+      await eliminarImagenesSubidas(uploadedImagePaths);
+      return { error: `Imagen: ${res.error}` };
+    }
     imagen = res.url || null;
+    if (res.path) uploadedImagePaths.push(res.path);
   }
 
   const ivaProductoResult = parseIvaPorcentaje(formData.get("iva_porcentaje"), "IVA");
@@ -266,9 +315,15 @@ export async function crearProducto(formData: FormData) {
     .select("id")
     .single();
 
-  if (error) return { error: error.message };
+  if (error) {
+    await eliminarImagenesSubidas(uploadedImagePaths);
+    return { error: error.message };
+  }
   const productoId = inserted?.id;
-  if (!productoId) return { error: "No se pudo crear el producto" };
+  if (!productoId) {
+    await eliminarImagenesSubidas(uploadedImagePaths);
+    return { error: "No se pudo crear el producto" };
+  }
 
   const { error: errRelaciones } = await supabase.from("producto_subcategorias").insert(
     subcategoriasResult.ids.map((subcategoriaId) => ({
@@ -277,7 +332,10 @@ export async function crearProducto(formData: FormData) {
     }))
   );
   if (errRelaciones) {
-    return { error: `Error al guardar subcategorías del producto: ${errRelaciones.message}` };
+    const revertError = await revertirCreacionProducto(productoId, uploadedImagePaths);
+    return {
+      error: `Error al guardar subcategorías del producto: ${errRelaciones.message}${revertError ? `. ${revertError}` : ""}`,
+    };
   }
 
   // Crear presentaciones; si no hay ninguna, crear "Principal" para inventario.
@@ -294,7 +352,12 @@ export async function crearProducto(formData: FormData) {
         orden: presentacion.orden,
       }))
     );
-    if (errPres) return { error: `Error al crear presentaciones: ${errPres.message}` };
+    if (errPres) {
+      const revertError = await revertirCreacionProducto(productoId, uploadedImagePaths);
+      return {
+        error: `Error al crear presentaciones: ${errPres.message}${revertError ? `. ${revertError}` : ""}`,
+      };
+    }
   } else {
     const { error: errPrincipal } = await supabase.from("producto_presentaciones").insert({
       producto_id: productoId,
@@ -306,7 +369,12 @@ export async function crearProducto(formData: FormData) {
       porcentaje_oferta: porcentajeOferta != null && porcentajeOferta >= 1 && porcentajeOferta <= 99 ? porcentajeOferta : null,
       orden: 0,
     });
-    if (errPrincipal) return { error: `Error al crear presentación Principal: ${errPrincipal.message}` };
+    if (errPrincipal) {
+      const revertError = await revertirCreacionProducto(productoId, uploadedImagePaths);
+      return {
+        error: `Error al crear presentación Principal: ${errPrincipal.message}${revertError ? `. ${revertError}` : ""}`,
+      };
+    }
   }
 
   revalidatePath("/dashboard/productos");
