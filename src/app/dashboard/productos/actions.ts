@@ -104,6 +104,14 @@ async function eliminarImagenesSubidas(paths: string[]) {
   }
 }
 
+function extraerPathDesdeUrlPublica(url: string | null | undefined) {
+  if (!url) return null;
+  const marcador = `/${BUCKET}/`;
+  const idx = url.indexOf(marcador);
+  if (idx === -1) return null;
+  return decodeURIComponent(url.slice(idx + marcador.length));
+}
+
 async function revertirCreacionProducto(productoId: string, uploadedImagePaths: string[]) {
   try {
     const supabase = createAdminClient();
@@ -408,16 +416,44 @@ export async function actualizarProducto(id: string, formData: FormData) {
   const dimUpdate = (formData.get("dimensiones") as string) || "";
   if (dimUpdate && dimUpdate.length > 100) return { error: "Dimensiones: máximo 100 caracteres" };
 
+  const uploadedImagePaths: string[] = [];
   const presentacionesResult = await extraerPresentacionesDesdeFormData(formData);
-  if ("error" in presentacionesResult) return presentacionesResult;
+  if ("error" in presentacionesResult) {
+    await eliminarImagenesSubidas(presentacionesResult.uploadedImagePaths);
+    return { error: presentacionesResult.error };
+  }
+  uploadedImagePaths.push(...presentacionesResult.uploadedImagePaths);
 
   const supabase = await createClient();
+  const { data: productoActual, error: errProductoActual } = await supabase
+    .from("productos")
+    .select("imagen")
+    .eq("id", id)
+    .maybeSingle();
+  if (errProductoActual) {
+    await eliminarImagenesSubidas(uploadedImagePaths);
+    return { error: `Error al consultar el producto actual: ${errProductoActual.message}` };
+  }
+
+  const { data: presentacionesExistentes, error: errPresentacionesExistentes } = await supabase
+    .from("producto_presentaciones")
+    .select("id, imagen")
+    .eq("producto_id", id);
+  if (errPresentacionesExistentes) {
+    await eliminarImagenesSubidas(uploadedImagePaths);
+    return { error: `Error al consultar presentaciones actuales: ${errPresentacionesExistentes.message}` };
+  }
+
   const file = formData.get("imagen") as File | null;
   let imagen: string | undefined;
   if (file?.size) {
     const res = await subirImagen(file);
-    if ("error" in res) return { error: `Imagen: ${res.error}` };
+    if ("error" in res) {
+      await eliminarImagenesSubidas(uploadedImagePaths);
+      return { error: `Imagen: ${res.error}` };
+    }
     if ("url" in res && res.url) imagen = res.url;
+    if (res.path) uploadedImagePaths.push(res.path);
   }
 
   const ivaProductoResult = parseIvaPorcentaje(formData.get("iva_porcentaje"), "IVA");
@@ -450,13 +486,17 @@ export async function actualizarProducto(id: string, formData: FormData) {
 
   const { error } = await supabase.from("productos").update(update).eq("id", id);
 
-  if (error) return { error: error.message };
+  if (error) {
+    await eliminarImagenesSubidas(uploadedImagePaths);
+    return { error: error.message };
+  }
 
   const { error: errDeleteRelaciones } = await supabase
     .from("producto_subcategorias")
     .delete()
     .eq("producto_id", id);
   if (errDeleteRelaciones) {
+    await eliminarImagenesSubidas(uploadedImagePaths);
     return { error: `Error al actualizar subcategorías del producto: ${errDeleteRelaciones.message}` };
   }
 
@@ -467,24 +507,27 @@ export async function actualizarProducto(id: string, formData: FormData) {
     }))
   );
   if (errInsertRelaciones) {
+    await eliminarImagenesSubidas(uploadedImagePaths);
     return { error: `Error al guardar subcategorías del producto: ${errInsertRelaciones.message}` };
   }
 
-  const { data: presentacionesExistentes, error: errPresentacionesExistentes } = await supabase
-    .from("producto_presentaciones")
-    .select("id")
-    .eq("producto_id", id);
-  if (errPresentacionesExistentes) {
-    return { error: `Error al consultar presentaciones actuales: ${errPresentacionesExistentes.message}` };
-  }
-
+  const presentacionesExistentesMap = new Map(
+    (presentacionesExistentes ?? []).map((p) => [p.id, p.imagen ?? null])
+  );
   const idsExistentes = new Set((presentacionesExistentes ?? []).map((p) => p.id));
   const idsConservados = new Set<string>();
+  const imagePathsToDelete: string[] = [];
+
+  const oldProductImagePath = extraerPathDesdeUrlPublica(productoActual?.imagen);
+  const newProductImagePath = extraerPathDesdeUrlPublica(imagen);
+  if (imagen !== undefined && oldProductImagePath && oldProductImagePath !== newProductImagePath) {
+    imagePathsToDelete.push(oldProductImagePath);
+  }
 
   if (presentacionesResult.presentaciones.length === 0) {
     const { data: principalExistente } = await supabase
       .from("producto_presentaciones")
-      .select("id")
+      .select("id, imagen")
       .eq("producto_id", id)
       .eq("nombre", "Principal")
       .order("created_at", { ascending: true })
@@ -509,8 +552,11 @@ export async function actualizarProducto(id: string, formData: FormData) {
         .eq("id", principalExistente.id)
         .eq("producto_id", id);
       if (errPrincipalUpdate) {
+        await eliminarImagenesSubidas(uploadedImagePaths);
         return { error: `Error al actualizar presentación Principal: ${errPrincipalUpdate.message}` };
       }
+      const oldImagePath = extraerPathDesdeUrlPublica(principalExistente.imagen);
+      if (oldImagePath) imagePathsToDelete.push(oldImagePath);
       idsConservados.add(principalExistente.id);
     } else {
       const { data: principalInsertada, error: errPrincipal } = await supabase
@@ -530,12 +576,16 @@ export async function actualizarProducto(id: string, formData: FormData) {
         })
         .select("id")
         .single();
-      if (errPrincipal) return { error: `Error al crear presentación Principal: ${errPrincipal.message}` };
+      if (errPrincipal) {
+        await eliminarImagenesSubidas(uploadedImagePaths);
+        return { error: `Error al crear presentación Principal: ${errPrincipal.message}` };
+      }
       if (principalInsertada?.id) idsConservados.add(principalInsertada.id);
     }
   } else {
     for (const presentacion of presentacionesResult.presentaciones) {
       if (presentacion.id && idsExistentes.has(presentacion.id)) {
+        const imagenAnterior = presentacionesExistentesMap.get(presentacion.id) ?? null;
         const { error: errPresUpdate } = await supabase
           .from("producto_presentaciones")
           .update({
@@ -550,7 +600,13 @@ export async function actualizarProducto(id: string, formData: FormData) {
           .eq("id", presentacion.id)
           .eq("producto_id", id);
         if (errPresUpdate) {
+          await eliminarImagenesSubidas(uploadedImagePaths);
           return { error: `Error al actualizar presentación "${presentacion.nombre}": ${errPresUpdate.message}` };
+        }
+        const oldImagePath = extraerPathDesdeUrlPublica(imagenAnterior);
+        const newImagePath = extraerPathDesdeUrlPublica(presentacion.imagen);
+        if (oldImagePath && oldImagePath !== newImagePath) {
+          imagePathsToDelete.push(oldImagePath);
         }
         idsConservados.add(presentacion.id);
       } else {
@@ -569,6 +625,7 @@ export async function actualizarProducto(id: string, formData: FormData) {
           .select("id")
           .single();
         if (errPresInsert) {
+          await eliminarImagenesSubidas(uploadedImagePaths);
           return { error: `Error al crear presentación "${presentacion.nombre}": ${errPresInsert.message}` };
         }
         if (presentacionInsertada?.id) idsConservados.add(presentacionInsertada.id);
@@ -577,10 +634,19 @@ export async function actualizarProducto(id: string, formData: FormData) {
   }
 
   const idsAEliminar = [...idsExistentes].filter((presentacionId) => !idsConservados.has(presentacionId));
+  idsAEliminar.forEach((presentacionId) => {
+    const oldImagePath = extraerPathDesdeUrlPublica(presentacionesExistentesMap.get(presentacionId));
+    if (oldImagePath) imagePathsToDelete.push(oldImagePath);
+  });
   if (idsAEliminar.length > 0) {
     const { error: errDel } = await supabase.from("producto_presentaciones").delete().in("id", idsAEliminar);
-    if (errDel) return { error: `Error al eliminar presentaciones removidas: ${errDel.message}` };
+    if (errDel) {
+      await eliminarImagenesSubidas(uploadedImagePaths);
+      return { error: `Error al eliminar presentaciones removidas: ${errDel.message}` };
+    }
   }
+
+  await eliminarImagenesSubidas(imagePathsToDelete);
 
   revalidatePath("/dashboard/productos");
   revalidatePath("/");

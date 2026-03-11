@@ -9,6 +9,7 @@ import {
 } from "./actions";
 import { ChevronLeft, ChevronRight, Pencil, Plus, Search, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ProductoForm } from "./ProductoForm";
 
 type Subcategoria = { id: string; nombre: string; categoria_id: string };
@@ -62,6 +63,7 @@ export function ProductosClient({
   categorias: Categoria[];
   subcategorias: Subcategoria[];
 }) {
+  const router = useRouter();
   const formContainerRef = useRef<HTMLDivElement | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -76,25 +78,55 @@ export function ProductosClient({
 
   async function handleCreate(formData: FormData) {
     setLoading(true);
-    const result = await crearProducto(formData);
-    setLoading(false);
-    if ("success" in result && result.success) setCreating(false);
-    return result;
+    try {
+      const result = await crearProducto(formData);
+      if ("success" in result && result.success) {
+        setCreating(false);
+        router.refresh();
+      }
+      return result;
+    } catch (error) {
+      return {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Ocurrió un error inesperado al crear el producto",
+      };
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleUpdate(id: string, formData: FormData) {
     setLoading(true);
-    const result = await actualizarProducto(id, formData);
-    setLoading(false);
-    if ("success" in result && result.success) setEditingId(null);
-    return result;
+    try {
+      const result = await actualizarProducto(id, formData);
+      if ("success" in result && result.success) {
+        setEditingId(null);
+        router.refresh();
+      }
+      return result;
+    } catch (error) {
+      return {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Ocurrió un error inesperado al actualizar el producto",
+      };
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleDelete(id: string) {
     if (!confirm("¿Eliminar este producto?")) return;
     setLoading(true);
-    await eliminarProducto(id);
-    setLoading(false);
+    try {
+      await eliminarProducto(id);
+      router.refresh();
+    } finally {
+      setLoading(false);
+    }
   }
 
   const prod = productos.find((p) => p.id === editingId);

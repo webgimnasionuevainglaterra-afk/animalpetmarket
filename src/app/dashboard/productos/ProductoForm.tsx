@@ -154,9 +154,17 @@ export function ProductoForm({
       formData.set("datos_juguete", JSON.stringify(dj));
     }
 
-    const result = await onSubmit(formData);
-    if ("error" in result && result.error) setError(result.error);
-    else if (onCancel) onCancel();
+    try {
+      const result = await onSubmit(formData);
+      if ("error" in result && result.error) setError(result.error);
+      else if (onCancel) onCancel();
+    } catch (error) {
+      setError(
+        error instanceof Error
+          ? error.message
+          : "Ocurrió un error inesperado al guardar el producto"
+      );
+    }
   }
 
   const d = (key: string, def = "") =>
