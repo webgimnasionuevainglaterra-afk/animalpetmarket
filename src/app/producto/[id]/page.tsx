@@ -100,7 +100,7 @@ export default async function ProductoPage({
 
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,#ffeef7,transparent_42%),#fff7ef] text-slate-800">
-      <main className="mx-auto w-full max-w-[1260px] px-3 pb-6 pt-3 sm:px-6">
+      <main className="mx-auto w-full max-w-[1260px] overflow-x-hidden px-3 pb-6 pt-3 sm:px-6">
         <TopBar />
 
         <Header />
@@ -115,7 +115,7 @@ export default async function ProductoPage({
           </Link>
 
           <div className="overflow-hidden rounded-[24px] border border-[#f3dcff] bg-white shadow-[0_22px_52px_rgba(123,31,162,0.12)]">
-            <div className="p-6 lg:p-8">
+            <div className="p-4 sm:p-6 lg:p-8">
               <ProductoDetalle
                 productId={producto.id}
                 nombre={producto.nombre}

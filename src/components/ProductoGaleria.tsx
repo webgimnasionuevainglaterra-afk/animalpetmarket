@@ -31,7 +31,7 @@ export function ProductoGaleria({
   const img = imagenes[activa] ?? imagenes[0];
 
   return (
-    <div className="space-y-3">
+    <div className="min-w-0 space-y-3">
       <div className="relative aspect-square overflow-hidden rounded-2xl bg-gradient-to-b from-[#fff8e8] to-[#ffeef6]">
         <img
           src={img?.url}
@@ -39,19 +39,19 @@ export function ProductoGaleria({
           className="h-full w-full object-cover"
         />
         {badge && (
-          <span className="absolute left-3 top-3 rounded-full bg-[#63c132] px-3 py-1 text-xs font-black text-white">
+          <span className="absolute left-3 top-3 max-w-[calc(100%-24px)] rounded-full bg-[#63c132] px-3 py-1 text-xs font-black text-white">
             {badge}
           </span>
         )}
       </div>
       {imagenes.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto pb-2">
+        <div className="flex max-w-full gap-2 overflow-x-auto pb-2">
           {imagenes.map((img, i) => (
             <button
               key={i}
               type="button"
               onClick={() => handleSelect(i)}
-              className={`h-16 w-16 shrink-0 overflow-hidden rounded-lg border-2 transition ${
+              className={`h-14 w-14 shrink-0 overflow-hidden rounded-lg border-2 transition sm:h-16 sm:w-16 ${
                 activa === i
                   ? "border-[var(--ca-purple)] ring-2 ring-[var(--ca-purple)]/30"
                   : "border-slate-200 hover:border-slate-300"

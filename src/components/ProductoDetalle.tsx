@@ -104,7 +104,7 @@ export function ProductoDetalle({
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
+    <div className="grid items-start gap-4 sm:gap-6 lg:grid-cols-[1fr_1fr]">
       {/* Galería */}
       <ProductoGaleria
         imagenes={imagenes}
@@ -115,19 +115,19 @@ export function ProductoDetalle({
       />
 
       {/* Info */}
-      <div className="flex flex-col">
-        <h1 className="text-2xl font-black text-[var(--ca-purple)] sm:text-3xl">
+      <div className="min-w-0 flex flex-col">
+        <h1 className="break-words text-2xl font-black text-[var(--ca-purple)] sm:text-3xl">
           {nombre}
         </h1>
 
         {/* Precio destacado */}
-        <div className="mt-2 flex items-center gap-2">
+        <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-2">
           {opcion?.porcentajeOferta ? (
             <>
-              <span className="text-lg text-slate-500 line-through">
+              <span className="text-base text-slate-500 line-through sm:text-lg">
                 ${opcion.precioOriginal.toLocaleString("es-CO")}
               </span>
-              <span className="text-3xl font-black text-[var(--ca-orange)]">
+              <span className="text-2xl font-black text-[var(--ca-orange)] sm:text-3xl">
                 ${precioActual.toLocaleString("es-CO")}
               </span>
               {tieneIva(opcion.ivaPorcentaje) && (
@@ -138,8 +138,8 @@ export function ProductoDetalle({
               </span>
             </>
           ) : (
-            <span className="flex items-center gap-2">
-              <span className="text-3xl font-black text-[var(--ca-orange)]">
+            <span className="flex flex-wrap items-end gap-x-2 gap-y-1">
+              <span className="text-2xl font-black text-[var(--ca-orange)] sm:text-3xl">
                 ${precioActual.toLocaleString("es-CO")}
               </span>
               {tieneIva(opcion?.ivaPorcentaje) && (
@@ -155,26 +155,26 @@ export function ProductoDetalle({
             <h3 className="mb-2 text-sm font-bold text-slate-600">
               Elige presentación
             </h3>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid gap-2 sm:flex sm:flex-wrap">
               {opciones.map((op, i) => (
                 <button
                   key={i}
                   type="button"
                   onClick={() => handleSeleccionar(i)}
-                  className={`rounded-xl border-2 px-4 py-2.5 text-sm font-semibold transition ${
+                  className={`w-full rounded-xl border-2 px-4 py-2.5 text-left text-sm font-semibold transition sm:w-auto ${
                     seleccionada === i
                       ? "border-[var(--ca-purple)] bg-[var(--ca-purple)]/10 text-[var(--ca-purple)]"
                       : "border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300"
                   }`}
                 >
-                  <span>{op.nombre}</span>
+                  <span className="block break-words">{op.nombre}</span>
                   {op.porcentajeOferta ? (
-                    <span className="ml-1.5">
-                      <span className="text-slate-400 line-through">${op.precioOriginal.toLocaleString("es-CO")}</span>
-                      <span className="ml-1 font-black text-[var(--ca-orange)]">${op.precio.toLocaleString("es-CO")}</span>
+                    <span className="mt-1 block sm:ml-1.5 sm:mt-0 sm:inline">
+                      <span className="block text-slate-400 line-through sm:inline">${op.precioOriginal.toLocaleString("es-CO")}</span>
+                      <span className="block font-black text-[var(--ca-orange)] sm:ml-1 sm:inline">${op.precio.toLocaleString("es-CO")}</span>
                     </span>
                   ) : (
-                    <span className="ml-1.5 font-black text-[var(--ca-orange)]">
+                    <span className="mt-1 block font-black text-[var(--ca-orange)] sm:ml-1.5 sm:mt-0 sm:inline">
                       ${op.precio.toLocaleString("es-CO")}
                     </span>
                   )}
@@ -188,7 +188,7 @@ export function ProductoDetalle({
         {descripcion && (
           <div className="mt-4">
             <h3 className="text-sm font-bold text-slate-600">Descripción</h3>
-            <p className="mt-1 whitespace-pre-wrap text-slate-700">{descripcion}</p>
+            <p className="mt-1 break-words whitespace-pre-wrap text-slate-700">{descripcion}</p>
           </div>
         )}
 
@@ -207,11 +207,11 @@ export function ProductoDetalle({
                     {Object.entries(datosMedicamento).map(
                       ([k, v]) =>
                         v && (
-                          <div key={k} className="flex gap-2">
+                          <div key={k} className="min-w-0">
                             <dt className="text-slate-500 capitalize">
                               {k.replace(/_/g, " ")}:
                             </dt>
-                            <dd className="font-medium">{v}</dd>
+                            <dd className="break-words font-medium">{v}</dd>
                           </div>
                         )
                     )}
@@ -228,11 +228,11 @@ export function ProductoDetalle({
                     {Object.entries(datosAlimento).map(
                       ([k, v]) =>
                         v && (
-                          <div key={k} className="flex gap-2">
+                          <div key={k} className="min-w-0">
                             <dt className="text-slate-500 capitalize">
                               {k.replace(/_/g, " ")}:
                             </dt>
-                            <dd className="font-medium">{v}</dd>
+                            <dd className="break-words font-medium">{v}</dd>
                           </div>
                         )
                     )}
@@ -249,11 +249,11 @@ export function ProductoDetalle({
                     {Object.entries(datosJuguete).map(
                       ([k, v]) =>
                         v && (
-                          <div key={k} className="flex gap-2">
+                          <div key={k} className="min-w-0">
                             <dt className="text-slate-500 capitalize">
                               {k.replace(/_/g, " ")}:
                             </dt>
-                            <dd className="font-medium">{v}</dd>
+                            <dd className="break-words font-medium">{v}</dd>
                           </div>
                         )
                     )}
@@ -291,7 +291,7 @@ export function ProductoDetalle({
         </div>
 
         {peso != null && (
-          <p className="mt-4 text-xs text-slate-500">
+          <p className="mt-4 break-words text-xs text-slate-500">
             Peso: {peso} kg
             {dimensiones && ` • ${dimensiones}`}
           </p>
