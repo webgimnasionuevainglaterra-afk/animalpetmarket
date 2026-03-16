@@ -664,7 +664,12 @@ function Seccion({
         {titulo}
         {expandido ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
       </button>
-      {expandido && <div className="border-t border-slate-200 p-4">{children}</div>}
+      <div
+        className={`border-t border-slate-200 p-4 ${expandido ? "block" : "hidden"}`}
+        aria-hidden={!expandido}
+      >
+        {children}
+      </div>
     </div>
   );
 }
