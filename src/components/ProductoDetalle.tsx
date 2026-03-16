@@ -188,7 +188,7 @@ export function ProductoDetalle({
         {descripcion && (
           <div className="mt-4">
             <h3 className="text-sm font-bold text-slate-600">Descripción</h3>
-            <p className="mt-1 break-words whitespace-pre-wrap text-slate-700">{descripcion}</p>
+            <p className="mt-1 break-words whitespace-pre-wrap text-justify text-slate-700">{descripcion}</p>
           </div>
         )}
 
