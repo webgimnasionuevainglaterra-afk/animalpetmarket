@@ -1,7 +1,8 @@
 "use client";
 
-import { crearCupon } from "./actions";
-import { Download, Tag } from "lucide-react";
+import { eliminarCupon, crearCupon } from "./actions";
+import { Download, Tag, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 type Cupon = {
@@ -15,18 +16,35 @@ type Cupon = {
 };
 
 export function CuponesClient({ cupones }: { cupones: Cupon[] }) {
+  const router = useRouter();
   const [porcentaje, setPorcentaje] = useState("");
   const [validoHasta, setValidoHasta] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [filtro, setFiltro] = useState<"todos" | "disponibles" | "usados">("todos");
+  const [filtro, setFiltro] = useState<"todos" | "disponibles" | "no_disponibles">("todos");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  function estaExpirado(cupon: Cupon) {
+    const hoy = new Date().toISOString().slice(0, 10);
+    return Boolean(cupon.valido_hasta && cupon.valido_hasta < hoy);
+  }
+
+  function estaDisponible(cupon: Cupon) {
+    return !cupon.usado && !estaExpirado(cupon);
+  }
+
+  function getEstado(cupon: Cupon) {
+    if (cupon.usado) return "Usado";
+    if (estaExpirado(cupon)) return "Expirado";
+    return "Disponible";
+  }
 
   const filtrados =
     filtro === "todos"
       ? cupones
       : filtro === "disponibles"
-        ? cupones.filter((c) => !c.usado)
-        : cupones.filter((c) => c.usado);
+        ? cupones.filter((c) => estaDisponible(c))
+        : cupones.filter((c) => !estaDisponible(c));
 
   function exportarCSV() {
     const esc = (v: string | number) => {
@@ -37,7 +55,7 @@ export function CuponesClient({ cupones }: { cupones: Cupon[] }) {
     const filas = filtrados.map((c) => [
       esc(c.codigo),
       c.porcentaje,
-      esc(c.usado ? "Usado" : "Disponible"),
+      esc(getEstado(c)),
       esc(c.valido_hasta ? new Date(c.valido_hasta).toLocaleDateString("es-CO") : "—"),
       esc(new Date(c.created_at).toLocaleString("es-CO")),
     ]);
@@ -70,6 +88,26 @@ export function CuponesClient({ cupones }: { cupones: Cupon[] }) {
       setPorcentaje("");
       setValidoHasta("");
     }
+  }
+
+  async function handleEliminar(cupon: Cupon) {
+    if (estaDisponible(cupon)) return;
+    const confirmar = window.confirm(
+      `¿Eliminar el cupón ${cupon.codigo}? Esta acción no se puede deshacer.`
+    );
+    if (!confirmar) return;
+
+    setError(null);
+    setDeletingId(cupon.id);
+    const res = await eliminarCupon(cupon.id);
+    setDeletingId(null);
+
+    if ("error" in res && res.error) {
+      setError(res.error);
+      return;
+    }
+
+    router.refresh();
   }
 
   return (
@@ -141,7 +179,7 @@ export function CuponesClient({ cupones }: { cupones: Cupon[] }) {
 
       <div className="mt-6">
         <div className="flex flex-wrap gap-2">
-          {(["todos", "disponibles", "usados"] as const).map((f) => (
+          {(["todos", "disponibles", "no_disponibles"] as const).map((f) => (
             <button
               key={f}
               type="button"
@@ -152,7 +190,7 @@ export function CuponesClient({ cupones }: { cupones: Cupon[] }) {
                   : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               }`}
             >
-              {f === "todos" ? "Todos" : f === "disponibles" ? "Disponibles" : "Usados"}
+              {f === "todos" ? "Todos" : f === "disponibles" ? "Disponibles" : "No disponibles"}
             </button>
           ))}
         </div>
@@ -172,6 +210,7 @@ export function CuponesClient({ cupones }: { cupones: Cupon[] }) {
                 <th className="px-4 py-3 font-semibold text-slate-700">Estado</th>
                 <th className="px-4 py-3 font-semibold text-slate-700">Válido hasta</th>
                 <th className="px-4 py-3 font-semibold text-slate-700">Creado</th>
+                <th className="px-4 py-3 font-semibold text-slate-700">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -180,13 +219,22 @@ export function CuponesClient({ cupones }: { cupones: Cupon[] }) {
                   <td className="px-4 py-3 font-mono font-bold text-slate-800">{c.codigo}</td>
                   <td className="px-4 py-3 text-slate-700">{c.porcentaje}%</td>
                   <td className="px-4 py-3">
+                    {(() => {
+                      const estado = getEstado(c);
+                      const clases =
+                        estado === "Usado"
+                          ? "bg-slate-200 text-slate-600"
+                          : estado === "Expirado"
+                            ? "bg-amber-100 text-amber-800"
+                            : "bg-green-100 text-green-800";
+                      return (
                     <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-bold ${
-                        c.usado ? "bg-slate-200 text-slate-600" : "bg-green-100 text-green-800"
-                      }`}
+                          className={`rounded-full px-2 py-0.5 text-xs font-bold ${clases}`}
                     >
-                      {c.usado ? "Usado" : "Disponible"}
+                          {estado}
                     </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-slate-600">
                     {c.valido_hasta
@@ -195,6 +243,21 @@ export function CuponesClient({ cupones }: { cupones: Cupon[] }) {
                   </td>
                   <td className="px-4 py-3 text-slate-600">
                     {new Date(c.created_at).toLocaleDateString("es-CO")}
+                  </td>
+                  <td className="px-4 py-3">
+                    {!estaDisponible(c) ? (
+                      <button
+                        type="button"
+                        onClick={() => handleEliminar(c)}
+                        disabled={deletingId === c.id}
+                        className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 transition hover:bg-red-100 disabled:opacity-60"
+                      >
+                        <Trash2 size={14} />
+                        {deletingId === c.id ? "Eliminando..." : "Eliminar"}
+                      </button>
+                    ) : (
+                      <span className="text-xs text-slate-400">Disponible</span>
+                    )}
                   </td>
                 </tr>
               ))}

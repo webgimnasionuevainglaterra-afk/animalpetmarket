@@ -1,6 +1,8 @@
 "use server";
 
-import { createAdminClient } from "@/lib/supabase/server";
+import { isValidUUID } from "@/lib/validations";
+import { createAdminClient, requireAuth } from "@/lib/supabase/server";
+import { revalidatePath } from "next/cache";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -21,5 +23,19 @@ export async function suscribirNewsletter(email: string) {
     if (error.code === "23505") return { success: true };
     return { error: error.message };
   }
+  return { success: true };
+}
+
+export async function eliminarSuscriptor(id: string) {
+  const auth = await requireAuth();
+  if (auth.error) return auth;
+  if (!isValidUUID(id)) return { error: "ID de suscriptor inválido" };
+
+  const supabase = createAdminClient();
+  const { error } = await supabase.from("suscriptores").delete().eq("id", id);
+
+  if (error) return { error: error.message };
+
+  revalidatePath("/dashboard/newsletter");
   return { success: true };
 }

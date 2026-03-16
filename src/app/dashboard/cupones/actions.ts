@@ -1,5 +1,6 @@
 "use server";
 
+import { isValidUUID } from "@/lib/validations";
 import { createAdminClient, requireAuth } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
@@ -57,4 +58,34 @@ export async function crearCupon(porcentaje: number, validoHasta: string | null)
 
   revalidatePath("/dashboard/cupones");
   return { success: true, cupon: data };
+}
+
+export async function eliminarCupon(id: string) {
+  const auth = await requireAuth();
+  if (auth.error) return auth;
+  if (!isValidUUID(id)) return { error: "ID de cupón inválido" };
+
+  const supabase = createAdminClient();
+  const hoy = new Date().toISOString().slice(0, 10);
+
+  const { data: cupon, error: errorConsulta } = await supabase
+    .from("cupones")
+    .select("id, usado, valido_hasta")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (errorConsulta) return { error: errorConsulta.message };
+  if (!cupon) return { error: "Cupón no encontrado" };
+
+  const expirado = Boolean(cupon.valido_hasta && cupon.valido_hasta < hoy);
+  const disponible = !cupon.usado && !expirado;
+  if (disponible) {
+    return { error: "Solo se pueden eliminar cupones no disponibles" };
+  }
+
+  const { error } = await supabase.from("cupones").delete().eq("id", id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/dashboard/cupones");
+  return { success: true };
 }

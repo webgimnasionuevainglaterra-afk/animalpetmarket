@@ -1,6 +1,9 @@
 "use client";
 
+import { eliminarSuscriptor } from "@/app/newsletter/actions";
 import { Download, Mail } from "lucide-react";
+import { Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 type Suscriptor = {
@@ -10,7 +13,10 @@ type Suscriptor = {
 };
 
 export function NewsletterClient({ suscriptores }: { suscriptores: Suscriptor[] }) {
+  const router = useRouter();
   const [busqueda, setBusqueda] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const filtrados = suscriptores.filter((s) =>
     s.email.toLowerCase().includes(busqueda.toLowerCase().trim())
@@ -30,6 +36,25 @@ export function NewsletterClient({ suscriptores }: { suscriptores: Suscriptor[] 
     a.download = `suscriptores-newsletter-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function handleEliminar(suscriptor: Suscriptor) {
+    const confirmar = window.confirm(
+      `¿Eliminar el suscriptor ${suscriptor.email}? Esta acción no se puede deshacer.`
+    );
+    if (!confirmar) return;
+
+    setError(null);
+    setDeletingId(suscriptor.id);
+    const res = await eliminarSuscriptor(suscriptor.id);
+    setDeletingId(null);
+
+    if ("error" in res && res.error) {
+      setError(res.error);
+      return;
+    }
+
+    router.refresh();
   }
 
   return (
@@ -63,6 +88,7 @@ export function NewsletterClient({ suscriptores }: { suscriptores: Suscriptor[] 
           onChange={(e) => setBusqueda(e.target.value)}
           className="w-full max-w-sm rounded-lg border border-slate-200 px-4 py-2.5 text-sm outline-none focus:border-[var(--ca-purple)]"
         />
+        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
       </div>
 
       <div className="mt-6 overflow-hidden rounded-xl border border-slate-200">
@@ -76,6 +102,7 @@ export function NewsletterClient({ suscriptores }: { suscriptores: Suscriptor[] 
               <tr>
                 <th className="px-4 py-3 font-semibold text-slate-700">Correo electrónico</th>
                 <th className="px-4 py-3 font-semibold text-slate-700">Fecha de suscripción</th>
+                <th className="px-4 py-3 font-semibold text-slate-700">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -87,6 +114,17 @@ export function NewsletterClient({ suscriptores }: { suscriptores: Suscriptor[] 
                       dateStyle: "medium",
                       timeStyle: "short",
                     })}
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() => handleEliminar(s)}
+                      disabled={deletingId === s.id}
+                      className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 transition hover:bg-red-100 disabled:opacity-60"
+                    >
+                      <Trash2 size={14} />
+                      {deletingId === s.id ? "Eliminando..." : "Eliminar"}
+                    </button>
                   </td>
                 </tr>
               ))}
